@@ -110,7 +110,6 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
                     if (script.integrity) newScript.integrity = script.integrity;
                     
                     newScript.onload = () => {
-                      console.log(`Script externo cargado: ${script.src}`);
                       resolve(true);
                     };
                     
@@ -154,7 +153,6 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
                     iframeDoc.body.appendChild(newScript);
                   }
                   
-                  console.log('Script inline ejecutado');
                 } catch (error) {
                   console.warn('Error procesando script inline:', error);
                 }
@@ -361,7 +359,6 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
       
       if (scripts.length === 0) return;
       
-      console.log('Re-ejecutando scripts despues de cambios...');
       
       // Separar scripts externos e inline
       const externalScripts = scripts.filter(s => s.src);
@@ -379,20 +376,13 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
             newScript.async = false;
             newScript.defer = false;
             
-            // Copiar atributos
             if (script.type) newScript.type = script.type;
             if (script.crossOrigin) newScript.crossOrigin = script.crossOrigin;
             if (script.integrity) newScript.integrity = script.integrity;
             
             await new Promise((resolve) => {
-              newScript.onload = () => {
-                console.log(`Script re-cargado: ${script.src}`);
-                resolve(true);
-              };
-              newScript.onerror = () => {
-                console.warn(`Error re-cargando: ${script.src}`);
-                resolve(false);
-              };
+              newScript.onload = () => resolve(true);
+              newScript.onerror = () => resolve(false);
               
               if (script.parentNode) {
                 script.parentNode.replaceChild(newScript, script);
@@ -425,7 +415,6 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
             script.parentNode.replaceChild(newScript, script);
           }
           
-          console.log('Script inline re-ejecutado');
         } catch (error) {
           console.warn('Error re-ejecutando script inline:', error);
         }
@@ -589,31 +578,30 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
     <div className="w-full h-full relative bg-gray-100">
 
       
-      {/* Indicador de modo de edición */}
+      {/* Visual edit mode indicator */}
       {isVisualEditMode && (
-        <div className="absolute top-4 left-4 z-20 bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center space-x-1.5">
-          <Pencil size={14} />
-          <span>Modo Edición Visual Activo</span>
+        <div className="absolute top-3 left-3 z-20 bg-amber-500/90 backdrop-blur-sm text-white px-2.5 py-1 rounded-lg text-xs font-medium flex items-center space-x-1.5 shadow-sm">
+          <Pencil size={12} />
+          <span>Edicion visual</span>
         </div>
       )}
       {isLoading && (
         <div className="absolute inset-0 bg-white flex items-center justify-center z-10">
           <div className="text-center">
-            <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-3"></div>
-            <p className="text-sm text-gray-600">Cargando contenido interactivo...</p>
-            <p className="text-xs text-gray-500 mt-2">Esto puede tomar unos segundos para contenido complejo</p>
+            <div className="w-6 h-6 border-2 border-gray-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-2"></div>
+            <p className="text-xs text-gray-500">Cargando contenido...</p>
           </div>
         </div>
       )}
       
       {hasError && (
         <div className="absolute inset-0 bg-red-50 flex items-center justify-center z-10">
-          <div className="text-center p-6 max-w-md">
-            <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <AlertTriangle size={24} className="text-red-500" />
+          <div className="text-center p-6 max-w-sm">
+            <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+              <AlertTriangle size={18} className="text-red-500" />
             </div>
-            <h3 className="text-lg font-medium text-red-800 mb-2">Error al cargar el contenido</h3>
-            <p className="text-sm text-red-600 mb-4">{errorMessage}</p>
+            <h3 className="text-sm font-semibold text-red-800 mb-1">Error al cargar</h3>
+            <p className="text-xs text-red-600 mb-3">{errorMessage}</p>
             <button
               onClick={() => {
                 setHasError(false);
@@ -643,7 +631,7 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
                   }, 100);
                 }
               }}
-              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+              className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-xs font-medium transition-colors"
             >
               Reintentar
             </button>

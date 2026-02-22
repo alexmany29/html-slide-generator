@@ -87,35 +87,34 @@ export default function ShareModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-gray-200">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center space-x-3">
-            <Share2 className="text-blue-600" size={24} />
+            <div className="w-9 h-9 bg-indigo-100 rounded-xl flex items-center justify-center">
+              <Share2 size={18} className="text-indigo-600" />
+            </div>
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Compartir presentación</h2>
-              <p className="text-sm text-gray-600">{presentationTitle}</p>
+              <h2 className="text-lg font-semibold text-gray-900">Compartir</h2>
+              <p className="text-xs text-gray-500 truncate max-w-[200px]">{presentationTitle}</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200"
-          >
-            <X size={20} />
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all">
+            <X size={18} />
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-5">
           {/* Public/Private Toggle */}
-          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
             <div className="flex items-center space-x-3">
-              {isPublic ? <Globe className="text-green-600" size={20} /> : <Lock className="text-gray-600" size={20} />}
+              {isPublic ? <Globe size={18} className="text-emerald-600" /> : <Lock size={18} className="text-gray-500" />}
               <div>
-                <p className="font-medium text-gray-900">
-                  {isPublic ? 'Presentación pública' : 'Presentación privada'}
+                <p className="text-sm font-medium text-gray-900">
+                  {isPublic ? 'Publica' : 'Privada'}
                 </p>
-                <p className="text-sm text-gray-600">
-                  {isPublic ? 'Cualquiera con el enlace puede verla' : 'Solo tú y usuarios compartidos pueden verla'}
+                <p className="text-xs text-gray-500">
+                  {isPublic ? 'Cualquiera con el enlace puede verla' : 'Solo tu y usuarios compartidos'}
                 </p>
               </div>
             </div>
@@ -123,92 +122,72 @@ export default function ShareModal({
               onClick={handleTogglePublic}
               disabled={sharing}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                isPublic ? 'bg-green-600' : 'bg-gray-300'
+                isPublic ? 'bg-emerald-500' : 'bg-gray-300'
               } ${sharing ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  isPublic ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${
+                isPublic ? 'translate-x-6' : 'translate-x-1'
+              }`} />
             </button>
           </div>
 
           {/* Copy Link */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Enlace de la presentación
-            </label>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Enlace</label>
             <div className="flex space-x-2">
               <input
                 type="text"
                 value={shareUrl}
                 readOnly
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm"
+                className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-600"
               />
               <button
                 onClick={handleCopyLink}
-                className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                  copied 
-                    ? 'bg-green-100 text-green-700' 
-                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
+                  copied ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-600 text-white hover:bg-indigo-700'
                 }`}
               >
-                <Copy size={16} />
+                <Copy size={15} />
               </button>
             </div>
-            {copied && (
-              <p className="text-sm text-green-600 mt-1">¡Enlace copiado!</p>
-            )}
+            {copied && <p className="text-xs text-emerald-600 mt-1">Enlace copiado</p>}
           </div>
 
           {/* Share by Email */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Compartir con usuario específico
-            </label>
-            <div className="space-y-3">
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Compartir por email</label>
+            <div className="space-y-2.5">
               <div className="flex space-x-2">
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="email@ejemplo.com"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                   onKeyDown={(e) => e.key === 'Enter' && handleShareByEmail()}
                 />
                 <button
                   onClick={handleShareByEmail}
                   disabled={!email.trim() || sharing}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all duration-200"
+                  className="px-3 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  <Mail size={16} />
+                  <Mail size={15} />
                 </button>
               </div>
-              
-              {/* Permission Level Selector */}
-              <div className="flex space-x-4">
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="permission"
-                    value="view"
-                    checked={permissionLevel === 'view'}
+
+              {/* Permission Level */}
+              <div className="flex space-x-3">
+                <label className="flex items-center space-x-1.5 cursor-pointer">
+                  <input type="radio" name="permission" value="view" checked={permissionLevel === 'view'}
                     onChange={(e) => setPermissionLevel(e.target.value as 'view' | 'edit')}
-                    className="text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="flex items-center space-x-1 text-sm text-gray-700"><Eye size={14} /><span>Solo ver</span></span>
+                    className="text-indigo-600 focus:ring-indigo-500" />
+                  <span className="flex items-center space-x-1 text-xs text-gray-600"><Eye size={12} /><span>Solo ver</span></span>
                 </label>
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="permission"
-                    value="edit"
-                    checked={permissionLevel === 'edit'}
+                <label className="flex items-center space-x-1.5 cursor-pointer">
+                  <input type="radio" name="permission" value="edit" checked={permissionLevel === 'edit'}
                     onChange={(e) => setPermissionLevel(e.target.value as 'view' | 'edit')}
-                    className="text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="flex items-center space-x-1 text-sm text-gray-700"><Pencil size={14} /><span>Puede editar</span></span>
+                    className="text-indigo-600 focus:ring-indigo-500" />
+                  <span className="flex items-center space-x-1 text-xs text-gray-600"><Pencil size={12} /><span>Puede editar</span></span>
                 </label>
               </div>
             </div>
@@ -216,21 +195,16 @@ export default function ShareModal({
 
           {/* Status Message */}
           {message && (
-            <div className={`p-3 rounded-lg text-sm ${
-              message.includes('Error') 
-                ? 'bg-red-100 text-red-700' 
-                : 'bg-green-100 text-green-700'
+            <div className={`p-2.5 rounded-xl text-xs ${
+              message.includes('Error') ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'
             }`}>
               {message}
             </div>
           )}
         </div>
 
-        <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-6 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium transition-all duration-200"
-          >
+        <div className="px-6 pb-6 flex justify-end">
+          <button onClick={onClose} className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium transition-colors">
             Cerrar
           </button>
         </div>

@@ -67,62 +67,45 @@ function SortableSlideItem({ slide, index, isActive, onSlideSelect, readOnly }: 
     >
       <button
         onClick={() => onSlideSelect(index)}
-        className={`w-full p-4 text-left rounded-xl border-2 transition-all duration-200 group relative ${
+        className={`w-full p-3 text-left rounded-lg border transition-all group relative ${
           isActive
-            ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-indigo-50 shadow-md transform scale-[1.02]'
-            : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50/50 hover:shadow-sm'
+            ? 'border-indigo-300 bg-indigo-50'
+            : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
         }`}
       >
-        <div className="flex items-start space-x-4">
-          {/* Drag handle */}
+        <div className="flex items-start space-x-3">
           {!readOnly && (
             <div
               {...attributes}
               {...listeners}
-              className={`flex-shrink-0 w-6 h-8 flex items-center justify-center cursor-grab active:cursor-grabbing transition-all ${
-                isActive 
-                  ? 'text-blue-600 hover:text-blue-700' 
-                  : 'text-gray-400 hover:text-gray-600'
-              }`}
+              className="flex-shrink-0 w-5 h-5 flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 mt-0.5"
               title="Arrastra para reordenar"
             >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-                <circle cx="2" cy="2" r="1"/>
-                <circle cx="6" cy="2" r="1"/>
-                <circle cx="10" cy="2" r="1"/>
-                <circle cx="2" cy="6" r="1"/>
-                <circle cx="6" cy="6" r="1"/>
-                <circle cx="10" cy="6" r="1"/>
-                <circle cx="2" cy="10" r="1"/>
-                <circle cx="6" cy="10" r="1"/>
-                <circle cx="10" cy="10" r="1"/>
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                <circle cx="2" cy="2" r="1"/><circle cx="2" cy="5" r="1"/><circle cx="2" cy="8" r="1"/>
+                <circle cx="6" cy="2" r="1"/><circle cx="6" cy="5" r="1"/><circle cx="6" cy="8" r="1"/>
               </svg>
             </div>
           )}
-          
-          <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-            isActive 
-              ? 'bg-blue-600 text-white shadow-lg' 
-              : 'bg-gray-200 text-gray-600 group-hover:bg-blue-100 group-hover:text-blue-700'
+
+          <div className={`flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold ${
+            isActive
+              ? 'bg-indigo-600 text-white'
+              : 'bg-gray-200 text-gray-500 group-hover:bg-gray-300'
           }`}>
             {index + 1}
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className={`text-sm font-semibold truncate mb-1 ${
-              isActive ? 'text-blue-900' : 'text-gray-900'
+            <h3 className={`text-xs font-semibold truncate ${
+              isActive ? 'text-indigo-900' : 'text-gray-900'
             }`}>
               {slide.title}
             </h3>
-            <p className={`text-xs leading-relaxed ${
-              isActive ? 'text-blue-700' : 'text-gray-600'
+            <p className={`text-[11px] leading-relaxed mt-0.5 line-clamp-2 ${
+              isActive ? 'text-indigo-600' : 'text-gray-500'
             }`}>
-              {truncatedText || 'Slide vacía'}
+              {truncatedText || 'Slide vacia'}
             </p>
-            <div className={`text-xs mt-2 ${
-              isActive ? 'text-blue-600' : 'text-gray-400'
-            }`}>
-              Actualizada: {slide.updatedAt instanceof Date ? slide.updatedAt.toLocaleDateString() : new Date(slide.updatedAt).toLocaleDateString()}
-            </div>
           </div>
         </div>
       </button>
@@ -171,15 +154,12 @@ export default function Sidebar({ slides, currentSlideIndex, onSlideSelect, onRe
   }
 
   return (
-    <div className="w-80 bg-white border-r border-gray-200 flex flex-col shadow-lg">
-      <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-        <h2 className="text-lg font-bold text-gray-900 flex items-center space-x-2">
-          <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
-          <span>Slides ({slides.length})</span>
-        </h2>
-        <p className="text-sm text-gray-600 mt-1">
-          {readOnly ? 'Haz clic para navegar' : 'Haz clic para navegar • Arrastra para reordenar'}
-        </p>
+    <div className="w-72 bg-white border-r border-gray-200 flex flex-col">
+      <div className="px-4 py-3 border-b border-gray-100">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-900">Slides</h2>
+          <span className="text-xs text-gray-400 tabular-nums">{slides.length} slides</span>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">

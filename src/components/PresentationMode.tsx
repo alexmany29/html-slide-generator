@@ -54,7 +54,6 @@ export default function PresentationMode({ slides, currentSlideIndex, onClose, o
           return;
         }
         
-        console.log('Entrando en pantalla completa...');
       } else {
         // Salir de pantalla completa
         if (document.exitFullscreen) {
@@ -67,7 +66,6 @@ export default function PresentationMode({ slides, currentSlideIndex, onClose, o
           await (document as any).msExitFullscreen();
         }
         
-        console.log('Saliendo de pantalla completa...');
       }
     } catch (error) {
       console.error('Error toggling fullscreen:', error);
@@ -101,7 +99,6 @@ export default function PresentationMode({ slides, currentSlideIndex, onClose, o
         (document as any).mozFullScreenElement || 
         (document as any).msFullscreenElement);
       
-      console.log('Fullscreen state changed:', isCurrentlyFullscreen);
       setIsFullscreen(isCurrentlyFullscreen);
     };
 
@@ -193,77 +190,71 @@ export default function PresentationMode({ slides, currentSlideIndex, onClose, o
   const progress = ((currentSlideIndex + 1) / slides.length) * 100;
 
   return (
-    <div className="fixed inset-0 bg-white z-50 flex flex-col">
-      {/* Header con controles */}
-      <div className="bg-gray-900 text-white p-4 flex items-center justify-between shadow-lg">
-        <div className="flex items-center space-x-4">
-          <span className="text-sm font-medium">
-            Slide {currentSlideIndex + 1} de {slides.length}
+    <div className="fixed inset-0 bg-gray-950 z-50 flex flex-col">
+      {/* Top bar */}
+      <div className="bg-gray-900/80 backdrop-blur-sm text-white px-4 py-2 flex items-center justify-between z-10">
+        <div className="flex items-center space-x-3">
+          <span className="text-xs text-gray-400 tabular-nums">
+            {currentSlideIndex + 1} / {slides.length}
           </span>
-          <span className="text-sm text-gray-300">{currentSlide.title}</span>
+          <span className="text-xs text-gray-500 truncate max-w-[200px]">{currentSlide.title}</span>
         </div>
-        
-        <div className="flex items-center space-x-2">
+
+        <div className="flex items-center space-x-1">
           <button
             onClick={goToPrevious}
             disabled={currentSlideIndex === 0}
-            className="p-2 hover:bg-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Anterior (←)"
+            className="p-1.5 hover:bg-white/10 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
-            <ChevronLeft size={20} />
+            <ChevronLeft size={18} />
           </button>
-          
           <button
             onClick={goToNext}
             disabled={currentSlideIndex === slides.length - 1}
-            className="p-2 hover:bg-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Siguiente (→)"
+            className="p-1.5 hover:bg-white/10 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
-            <ChevronRight size={20} />
+            <ChevronRight size={18} />
           </button>
-          
-          <div className="w-px h-6 bg-gray-600 mx-2" />
-          
+          <div className="w-px h-4 bg-gray-700 mx-1" />
           <button
             onClick={toggleFullscreen}
-            className="p-2 hover:bg-gray-700 rounded"
+            className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
             title={isFullscreen ? 'Salir de pantalla completa (F)' : 'Pantalla completa (F)'}
           >
-            <Maximize2 size={20} />
+            <Maximize2 size={18} />
           </button>
-          
           <button
             onClick={handleClose}
-            className="p-2 hover:bg-gray-700 rounded"
+            className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
             title="Cerrar (Esc)"
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
       </div>
-      
-      {/* Barra de progreso */}
-      <div className="h-1 bg-gray-200">
-        <div 
-          className="h-full bg-blue-500 transition-all duration-300"
+
+      {/* Progress bar */}
+      <div className="h-0.5 bg-gray-800">
+        <div
+          className="h-full bg-indigo-500 transition-all duration-300"
           style={{ width: `${progress}%` }}
         />
       </div>
 
-      {/* Contenido del slide */}
+      {/* Slide content */}
       <div className="flex-1 overflow-auto bg-white">
-        <SlideViewer 
-          slide={currentSlide} 
-          onSlideUpdate={() => {}} 
+        <SlideViewer
+          slide={currentSlide}
+          onSlideUpdate={() => {}}
           isPresentation={true}
         />
       </div>
-      
-      {/* Footer con atajos de teclado */}
-      <div className="bg-gray-100 px-4 py-2 text-xs text-gray-600 flex justify-center space-x-6">
-        <span>← → Navegar</span>
-        <span>F Pantalla completa</span>
-        <span>Esc Salir</span>
+
+      {/* Keyboard hints */}
+      <div className="bg-gray-900/80 backdrop-blur-sm px-4 py-1.5 flex justify-center space-x-6">
+        <span className="text-[11px] text-gray-500"><kbd className="text-gray-400">← →</kbd> Navegar</span>
+        <span className="text-[11px] text-gray-500"><kbd className="text-gray-400">F</kbd> Pantalla completa</span>
+        <span className="text-[11px] text-gray-500"><kbd className="text-gray-400">Esc</kbd> Salir</span>
       </div>
     </div>
   );

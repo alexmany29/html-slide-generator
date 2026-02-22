@@ -189,9 +189,9 @@ export default function SharedViewer() {
                   onClick={() => setCurrentIndex(index)}
                   className={`h-1 rounded-full flex-1 transition-all ${
                     index === currentIndex
-                      ? 'bg-blue-500'
+                      ? 'bg-indigo-500'
                       : index < currentIndex
-                        ? 'bg-blue-500/40'
+                        ? 'bg-indigo-500/40'
                         : 'bg-gray-700'
                   }`}
                 />

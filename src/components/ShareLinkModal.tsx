@@ -109,8 +109,8 @@ export default function ShareLinkModal({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 bg-blue-100 rounded-xl flex items-center justify-center">
-              <Link2 size={18} className="text-blue-600" />
+            <div className="w-9 h-9 bg-indigo-100 rounded-xl flex items-center justify-center">
+              <Link2 size={18} className="text-indigo-600" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Compartir por enlace</h2>
@@ -129,7 +129,7 @@ export default function ShareLinkModal({
               onClick={() => setShareType('presentation')}
               className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                 shareType === 'presentation'
-                  ? 'bg-blue-100 text-blue-700'
+                  ? 'bg-indigo-100 text-indigo-700'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
@@ -141,7 +141,7 @@ export default function ShareLinkModal({
                 onClick={() => setShareType('slide')}
                 className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                   shareType === 'slide'
-                    ? 'bg-blue-100 text-blue-700'
+                    ? 'bg-indigo-100 text-indigo-700'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
@@ -157,12 +157,12 @@ export default function ShareLinkModal({
               value={linkTitle}
               onChange={(e) => setLinkTitle(e.target.value)}
               placeholder="Nombre del enlace (opcional)"
-              className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
             />
             <select
               value={expiresIn}
               onChange={(e) => setExpiresIn(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
+              className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
             >
               <option value="never">Sin caducidad</option>
               <option value="1h">1 hora</option>
@@ -175,7 +175,7 @@ export default function ShareLinkModal({
           <button
             onClick={createLink}
             disabled={creating}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2.5 rounded-lg font-medium text-sm transition-all flex items-center justify-center space-x-2"
+            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white px-4 py-2.5 rounded-xl font-medium text-sm transition-all flex items-center justify-center space-x-2"
           >
             {creating ? (
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -192,7 +192,7 @@ export default function ShareLinkModal({
         <div className="flex-1 overflow-y-auto px-6 py-3">
           {loading ? (
             <div className="text-center py-8">
-              <div className="w-6 h-6 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin mx-auto mb-2" />
+              <div className="w-6 h-6 border-2 border-gray-200 border-t-indigo-500 rounded-full animate-spin mx-auto mb-2" />
               <p className="text-xs text-gray-400">Cargando enlaces...</p>
             </div>
           ) : links.length === 0 ? (
@@ -223,7 +223,7 @@ export default function ShareLinkModal({
                           <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
                             link.slide_id
                               ? 'bg-purple-100 text-purple-700'
-                              : 'bg-blue-100 text-blue-700'
+                              : 'bg-indigo-100 text-indigo-700'
                           }`}>
                             {link.slide_id ? 'Slide' : 'Completa'}
                           </span>

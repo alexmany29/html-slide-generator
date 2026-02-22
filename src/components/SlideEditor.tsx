@@ -118,47 +118,26 @@ export default function SlideEditor({ slides, onSlideUpdate, onAddSlide, onDelet
 
   if (!currentSlide) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center bg-white rounded-2xl shadow-xl p-8">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Cargando editor...</h2>
-          <p className="text-gray-600">Por favor espera un momento</p>
+      <div className="flex-1 flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-8 h-8 border-3 border-gray-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-sm text-gray-500">Cargando editor...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col">
-      {/* Header */}
-      <div className="bg-white shadow-lg backdrop-blur-sm border-b border-gray-200">
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-6">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">S</span>
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900">HTML Slides Editor</h1>
-                  <p className="text-sm text-gray-500">Professional presentation tool</p>
-                </div>
-              </div>
-              <div className="hidden md:flex items-center space-x-4">
-                <div className="bg-gray-50 rounded-lg px-4 py-2">
-                  <EditableText
-                    content={currentSlide.title}
-                    onChange={(title) => handleSlideUpdate({ title })}
-                    className="font-medium text-gray-700 text-lg"
-                    placeholder="Título de la slide"
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="hidden md:block text-sm text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
-              <span className="font-medium">Guardado automáticamente</span>
-            </div>
-          </div>
+    <div className="flex-1 flex flex-col bg-gray-50">
+      {/* Toolbar + slide title */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="flex items-center px-4 py-2 border-b border-gray-100">
+          <EditableText
+            content={currentSlide.title}
+            onChange={(title) => handleSlideUpdate({ title })}
+            className="font-medium text-gray-700 text-sm"
+            placeholder="Titulo de la slide"
+          />
         </div>
 
         <Toolbar
@@ -189,8 +168,8 @@ export default function SlideEditor({ slides, onSlideUpdate, onAddSlide, onDelet
           readOnly={readOnly}
         />
 
-        <div className="flex-1 p-6 flex flex-col">
-          <div className="flex-1 bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+        <div className="flex-1 p-4 flex flex-col min-w-0">
+          <div className="flex-1 bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
             <SlideViewer
               slide={{
                 ...currentSlide,

@@ -47,8 +47,8 @@ export default function PresentationViewer() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando presentación...</p>
+          <div className="w-8 h-8 border-2 border-gray-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-sm text-gray-500">Cargando presentacion...</p>
         </div>
       </div>
     );
@@ -69,7 +69,7 @@ export default function PresentationViewer() {
           </p>
           <button
             onClick={() => navigate('/')}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors"
           >
             Volver al dashboard
           </button>
@@ -78,23 +78,22 @@ export default function PresentationViewer() {
     );
   }
 
-  // Show empty state only if we're sure there are no slides after loading
   if (slides.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
-            <FileText size={28} className="text-gray-400" />
+          <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+            <FileText size={24} className="text-gray-400" />
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">
-            Esta presentación no tiene slides
+          <h2 className="text-lg font-semibold text-gray-900 mb-1">
+            Sin slides
           </h2>
-          <p className="text-gray-600 mb-4">
-            Esta presentación está vacía.
+          <p className="text-sm text-gray-500 mb-4">
+            Esta presentacion esta vacia.
           </p>
           <button
             onClick={() => navigate('/')}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors"
           >
             Volver al dashboard
           </button>

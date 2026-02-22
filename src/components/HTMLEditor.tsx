@@ -88,37 +88,42 @@ export default function HTMLEditor({ content, onChange, onClose }: HTMLEditorPro
   }, [isPreview, htmlContent]);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[95vh] flex flex-col border border-gray-200">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Editor HTML</h2>
-            <p className="text-gray-600 text-sm mt-1">Edita el código HTML de tu slide</p>
-          </div>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[95vh] flex flex-col border border-gray-200 animate-in">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
           <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+              <Code size={16} className="text-gray-600" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Editor HTML</h2>
+              <p className="text-xs text-gray-500">Edita el codigo de tu slide</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-1.5">
             <button
               onClick={() => setIsPreview(!isPreview)}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                isPreview 
-                  ? 'bg-blue-600 text-white shadow-md' 
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                isPreview
+                  ? 'bg-indigo-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              {isPreview ? <Code size={18} /> : <Eye size={18} />}
-              <span>{isPreview ? 'Código' : 'Preview'}</span>
+              {isPreview ? <Code size={15} /> : <Eye size={15} />}
+              <span>{isPreview ? 'Codigo' : 'Preview'}</span>
             </button>
             <button
               onClick={handleDownload}
-              className="flex items-center space-x-2 px-4 py-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 font-medium transition-all duration-200"
+              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
               title="Descargar HTML"
             >
-              <Download size={18} />
+              <Download size={16} />
             </button>
             <button
               onClick={onClose}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200"
+              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
             >
-              <X size={20} />
+              <X size={16} />
             </button>
           </div>
         </div>
@@ -167,22 +172,22 @@ export default function HTMLEditor({ content, onChange, onClose }: HTMLEditorPro
           )}
         </div>
 
-        <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
-          <div className="text-sm text-gray-600">
-            <kbd className="px-2 py-1 bg-gray-200 rounded text-xs">Ctrl+S</kbd> para guardar
+        <div className="px-5 py-3 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+          <div className="text-xs text-gray-500">
+            <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-[11px] font-mono">Ctrl+S</kbd> guardar
           </div>
-          <div className="flex space-x-3">
+          <div className="flex space-x-2">
             <button
               onClick={onClose}
-              className="px-5 py-2.5 text-gray-600 hover:text-gray-800 font-medium transition-colors"
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 font-medium transition-colors"
             >
               Cancelar
             </button>
             <button
               onClick={handleSave}
-              className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 font-medium transform hover:scale-105 transition-all duration-200 shadow-md hover:shadow-lg"
+              className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
             >
-              Aplicar Cambios
+              Aplicar cambios
             </button>
           </div>
         </div>
