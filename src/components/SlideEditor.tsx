@@ -1,0 +1,234 @@
+import { useState, useEffect, useRef } from 'react';
+import Sidebar from './Sidebar';
+import Toolbar from './Toolbar';
+import SlideViewer from './SlideViewer';
+import HTMLEditor from './HTMLEditor';
+import PresentationMode from './PresentationMode';
+import EditableText from './EditableText';
+
+
+interface Slide {
+  id: string;
+  title: string;
+  htmlContent: string;
+}
+
+interface SlideEditorProps {
+  slides: Slide[];
+  onSlideUpdate?: (id: string, updates: Partial<Slide>) => void;
+  onAddSlide?: () => void;
+  onDeleteSlide?: (id: string) => void;
+  onReorderSlides?: (slides: Slide[]) => void;
+  readOnly?: boolean;
+}
+
+export default function SlideEditor({ slides, onSlideUpdate, onAddSlide, onDeleteSlide, onReorderSlides, readOnly = false }: SlideEditorProps) {
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const [showHTMLEditor, setShowHTMLEditor] = useState(false);
+  const [showPresentation, setShowPresentation] = useState(false);
+  const [isVisualEditMode, setIsVisualEditMode] = useState(false);
+  const [pendingDuplication, setPendingDuplication] = useState<{slideData: Slide, originalLength: number} | null>(null);
+  const previousSlidesLength = useRef(slides.length);
+
+  // Ajustar el índice actual si está fuera de rango después de borrar slides
+  const safeCurrentIndex = Math.min(currentSlideIndex, slides.length - 1);
+  const currentSlide = slides[safeCurrentIndex] || null;
+  
+  // Actualizar el índice si cambió
+  if (safeCurrentIndex !== currentSlideIndex && slides.length > 0) {
+    setCurrentSlideIndex(safeCurrentIndex);
+  }
+
+  const handleSlideUpdate = (updates: Partial<Slide>) => {
+    if (currentSlide && onSlideUpdate && !readOnly) {
+      onSlideUpdate(currentSlide.id, updates);
+    }
+  };
+
+  const handleSave = () => {
+    // Trigger save notification
+    console.log('Cambios guardados automáticamente');
+  };
+
+  const changeSlide = (index: number) => {
+    if (index >= 0 && index < slides.length) {
+      setCurrentSlideIndex(index);
+    }
+  };
+  
+  const handleDeleteSlide = (slideId: string) => {
+    if (readOnly || !onDeleteSlide) return;
+    
+    console.log('Deleting slide:', slideId, 'Current index:', currentSlideIndex);
+    
+    // Si estamos borrando la slide actual y no es la última
+    const slideIndex = slides.findIndex(s => s.id === slideId);
+    
+    onDeleteSlide(slideId);
+    
+    // Ajustar el índice después de borrar
+    if (slideIndex === currentSlideIndex) {
+      // Si borramos la slide actual
+      if (currentSlideIndex >= slides.length - 1) {
+        // Si era la última slide, ir a la anterior
+        setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1));
+      }
+      // Si no era la última, el índice se mantiene (la siguiente slide tomará su lugar)
+    } else if (slideIndex < currentSlideIndex) {
+      // Si borramos una slide anterior, ajustar el índice
+      setCurrentSlideIndex(currentSlideIndex - 1);
+    }
+  };
+
+  // Efecto para manejar la duplicación cuando se agrega una nueva slide
+  useEffect(() => {
+    if (pendingDuplication && slides.length > pendingDuplication.originalLength) {
+      // Se agregó una nueva slide, duplicar el contenido
+      const newSlideIndex = slides.length - 1;
+      const newSlide = slides[newSlideIndex];
+      
+      if (newSlide && onSlideUpdate) {
+        console.log('Duplicando contenido en nueva slide:', newSlide.id);
+        onSlideUpdate(newSlide.id, {
+          title: `${pendingDuplication.slideData.title} (copia)`,
+          htmlContent: pendingDuplication.slideData.htmlContent
+        });
+        // Cambiar a la nueva slide
+        setCurrentSlideIndex(newSlideIndex);
+      }
+      
+      // Limpiar el estado de duplicación pendiente
+      setPendingDuplication(null);
+    }
+    
+    // Actualizar la referencia de longitud anterior
+    previousSlidesLength.current = slides.length;
+  }, [slides.length, pendingDuplication]);
+
+  const duplicateSlide = () => {
+    if (currentSlide && onAddSlide && !readOnly) {
+      console.log('Iniciando duplicación de slide:', currentSlide);
+      // Guardar los datos de la slide a duplicar
+      setPendingDuplication({
+        slideData: { ...currentSlide },
+        originalLength: slides.length
+      });
+      // Crear una nueva slide básica
+      onAddSlide();
+    }
+  };
+
+  if (!currentSlide) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center bg-white rounded-2xl shadow-xl p-8">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Cargando editor...</h2>
+          <p className="text-gray-600">Por favor espera un momento</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col">
+      {/* Header */}
+      <div className="bg-white shadow-lg backdrop-blur-sm border-b border-gray-200">
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-6">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center">
+                  <span className="text-white font-bold text-lg">S</span>
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">HTML Slides Editor</h1>
+                  <p className="text-sm text-gray-500">Professional presentation tool</p>
+                </div>
+              </div>
+              <div className="hidden md:flex items-center space-x-4">
+                <div className="bg-gray-50 rounded-lg px-4 py-2">
+                  <EditableText
+                    content={currentSlide.title}
+                    onChange={(title) => handleSlideUpdate({ title })}
+                    className="font-medium text-gray-700 text-lg"
+                    placeholder="Título de la slide"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="hidden md:block text-sm text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+              <span className="font-medium">Guardado automáticamente</span>
+            </div>
+          </div>
+        </div>
+
+        <Toolbar
+          onAddSlide={readOnly ? undefined : onAddSlide}
+          onDuplicateSlide={readOnly ? undefined : duplicateSlide}
+          onDeleteSlide={readOnly ? undefined : () => handleDeleteSlide(currentSlide.id)}
+          onEditHTML={readOnly ? undefined : () => setShowHTMLEditor(true)}
+          onPresentationMode={() => setShowPresentation(true)}
+          onSave={readOnly ? undefined : handleSave}
+          canDelete={slides.length > 1 && !readOnly}
+          readOnly={readOnly}
+          onToggleVisualEdit={readOnly ? undefined : () => setIsVisualEditMode(!isVisualEditMode)}
+          isVisualEditMode={isVisualEditMode}
+        />
+      </div>
+
+      {/* Main content */}
+      <div className="flex-1 flex overflow-hidden">
+        <Sidebar
+          slides={slides.map(slide => ({
+            ...slide,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          }))}
+          currentSlideIndex={currentSlideIndex}
+          onSlideSelect={changeSlide}
+          onReorderSlides={readOnly ? undefined : onReorderSlides}
+          readOnly={readOnly}
+        />
+
+        <div className="flex-1 p-6 flex flex-col">
+          <div className="flex-1 bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+            <SlideViewer
+              slide={{
+                ...currentSlide,
+                createdAt: new Date(),
+                updatedAt: new Date()
+              }}
+              onSlideUpdate={readOnly ? undefined : handleSlideUpdate}
+              readOnly={readOnly}
+              enableVisualEditing={true}
+              isVisualEditMode={isVisualEditMode}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Modals */}
+      {showHTMLEditor && !readOnly && (
+        <HTMLEditor
+          content={currentSlide.htmlContent}
+          onChange={(htmlContent) => handleSlideUpdate({ htmlContent })}
+          onClose={() => setShowHTMLEditor(false)}
+        />
+      )}
+
+      {showPresentation && (
+        <PresentationMode
+          slides={slides.map(slide => ({
+            ...slide,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          }))}
+          currentSlideIndex={currentSlideIndex}
+          onClose={() => setShowPresentation(false)}
+          onSlideChange={changeSlide}
+        />
+      )}
+    </div>
+  );
+}
