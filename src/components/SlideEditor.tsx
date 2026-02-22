@@ -49,7 +49,7 @@ export default function SlideEditor({ slides, onSlideUpdate, onAddSlide, onDelet
 
   const handleSave = () => {
     // Trigger save notification
-    console.log('Cambios guardados automáticamente');
+    // Save handled by auto-save in PresentationEditor
   };
 
   const changeSlide = (index: number) => {

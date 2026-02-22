@@ -367,10 +367,7 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
       // Re-ejecutar scripts externos primero
       for (const script of externalScripts) {
         try {
-          // Solo re-ejecutar si el script ya estaba cargado
           if (script.src && !script.src.includes('tailwindcss')) {
-            console.log(`Re-cargando script: ${script.src}`);
-            
             const newScript = iframeDoc.createElement('script');
             newScript.src = script.src;
             newScript.async = false;
