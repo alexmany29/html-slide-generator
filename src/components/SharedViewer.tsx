@@ -76,13 +76,105 @@ export default function SharedViewer() {
   };
 
   const downloadPdf = () => {
-    // Find the iframe inside the slide viewer and print it
-    const iframe = document.querySelector<HTMLIFrameElement>('.shared-slide-viewer iframe');
-    if (iframe?.contentWindow) {
-      iframe.contentWindow.print();
-    } else {
-      window.print();
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    // Collect all <head> content from the first slide to reuse shared styles/scripts
+    // We parse the first slide to extract any <head> contents (stylesheets, fonts, etc.)
+    const extractHead = (html: string): string => {
+      const match = html.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
+      return match ? match[1] : '';
+    };
+
+    // Extract <body> content from slide HTML, or use the whole string if no body tags
+    const extractBody = (html: string): string => {
+      const match = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+      return match ? match[1] : html;
+    };
+
+    // Sanitize: strip contenteditable artifacts
+    const sanitize = (html: string): string =>
+      html
+        .replace(/\s*contenteditable="[^"]*"/gi, '')
+        .replace(/\s*data-visual-edit(="[^"]*")?/gi, '');
+
+    // Gather shared head from first slide
+    const sharedHead = slides.length > 0 ? extractHead(sanitize(slides[0].htmlContent)) : '';
+
+    // Build each slide as a page
+    const slidePages = slides.map((s, i) => `
+      <div class="slide-page">
+        <div class="slide-number">${i + 1} / ${slides.length}</div>
+        <div class="slide-content">${extractBody(sanitize(s.htmlContent))}</div>
+      </div>
+    `).join('\n');
+
+    const printDoc = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${presentation?.title || 'Presentación'} — PDF</title>
+  ${sharedHead}
+  <style>
+    @page {
+      size: landscape;
+      margin: 0;
     }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
+    }
+    .slide-page {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      page-break-after: always;
+      position: relative;
+      background: #ffffff;
+    }
+    .slide-page:last-child {
+      page-break-after: auto;
+    }
+    .slide-content {
+      width: 100%;
+      height: 100%;
+      padding: 40px;
+      overflow: hidden;
+    }
+    .slide-number {
+      position: absolute;
+      bottom: 12px;
+      right: 20px;
+      font-size: 10px;
+      color: #9ca3af;
+      z-index: 10;
+    }
+    /* Hide slide numbers on print if desired */
+    @media print {
+      .slide-number { color: #d1d5db; }
+    }
+    /* Ensure images fit within the page */
+    img { max-width: 100%; height: auto; }
+  </style>
+</head>
+<body>
+  ${slidePages}
+  <script>
+    window.onload = function() {
+      setTimeout(function() { window.print(); }, 400);
+    };
+  </script>
+</body>
+</html>`;
+
+    printWindow.document.open();
+    printWindow.document.write(printDoc);
+    printWindow.document.close();
   };
 
   // Loading state
