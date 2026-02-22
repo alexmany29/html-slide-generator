@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { FileText, Pencil, AlertTriangle } from 'lucide-react';
 import { Slide } from '../types';
 
@@ -11,22 +11,159 @@ interface SlideViewerProps {
   isVisualEditMode?: boolean;
 }
 
+// Marker attribute so we know which elements WE made editable
+const EDIT_MARKER = 'data-visual-edit';
+// ID for our injected style tag
+const EDIT_STYLE_ID = '__visual-edit-styles';
+
 export default function SlideViewer({ slide, onSlideUpdate, isPresentation = false, readOnly = false, enableVisualEditing = false, isVisualEditMode: externalVisualEditMode }: SlideViewerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const isVisualEditMode = externalVisualEditMode || false;
-  
-  // Verificar si el contenido está vacío
-  const isEmpty = !slide.htmlContent || slide.htmlContent.trim() === '';
-  
-  // Todos los hooks deben estar antes de cualquier early return
 
+  // Refs so closures inside the iframe always see current values
+  const visualEditRef = useRef(isVisualEditMode);
+  const onSlideUpdateRef = useRef(onSlideUpdate);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const iframeReadyRef = useRef(false);
+
+  // Keep refs in sync
+  useEffect(() => { visualEditRef.current = isVisualEditMode; }, [isVisualEditMode]);
+  useEffect(() => { onSlideUpdateRef.current = onSlideUpdate; }, [onSlideUpdate]);
+
+  const isEmpty = !slide.htmlContent || slide.htmlContent.trim() === '';
+
+  // ── Extract clean HTML from iframe (strips all our edit artifacts) ──
+  const getCleanHtml = useCallback((iframeDoc: Document): string => {
+    // Clone the document so we don't mutate the live DOM
+    const clone = iframeDoc.documentElement.cloneNode(true) as HTMLElement;
+
+    // Remove our injected style
+    clone.querySelector(`#${EDIT_STYLE_ID}`)?.remove();
+
+    // Remove contenteditable and our marker from all elements
+    clone.querySelectorAll(`[${EDIT_MARKER}]`).forEach(el => {
+      el.removeAttribute('contenteditable');
+      el.removeAttribute(EDIT_MARKER);
+    });
+
+    return clone.outerHTML;
+  }, []);
+
+  // ── Debounced save: waits 600ms after last edit ──
+  const scheduleSave = useCallback((iframeDoc: Document) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      if (!visualEditRef.current || !onSlideUpdateRef.current) return;
+      const cleanHtml = getCleanHtml(iframeDoc);
+      onSlideUpdateRef.current({ htmlContent: cleanHtml });
+    }, 600);
+  }, [getCleanHtml]);
+
+  // ── Enable visual editing on the iframe document ──
+  const enableEditMode = useCallback((iframeDoc: Document) => {
+    // Prevent double-init
+    if (iframeDoc.getElementById(EDIT_STYLE_ID)) return;
+
+    // Inject edit styles (single style tag, easy to remove)
+    const style = iframeDoc.createElement('style');
+    style.id = EDIT_STYLE_ID;
+    style.textContent = `
+      [${EDIT_MARKER}] {
+        outline: 1px dashed rgba(99,102,241,0.4) !important;
+        outline-offset: 2px !important;
+        cursor: text !important;
+        transition: outline-color 0.15s, background-color 0.15s !important;
+      }
+      [${EDIT_MARKER}]:hover {
+        outline-color: rgba(99,102,241,0.7) !important;
+        background-color: rgba(99,102,241,0.04) !important;
+      }
+      [${EDIT_MARKER}]:focus {
+        outline: 2px solid #6366f1 !important;
+        outline-offset: 2px !important;
+        background-color: rgba(99,102,241,0.06) !important;
+      }
+    `;
+    iframeDoc.head?.appendChild(style);
+
+    // Make leaf text elements editable
+    const selector = 'p, h1, h2, h3, h4, h5, h6, li, td, th, figcaption, blockquote, label, summary';
+    iframeDoc.querySelectorAll(selector).forEach(el => {
+      const htmlEl = el as HTMLElement;
+      // Only target elements that have direct text content (not wrapper divs)
+      if (htmlEl.textContent?.trim()) {
+        htmlEl.contentEditable = 'true';
+        htmlEl.setAttribute(EDIT_MARKER, '');
+      }
+    });
+
+    // Also make span/a that are leaf nodes (no child elements) editable
+    iframeDoc.querySelectorAll('span, a').forEach(el => {
+      const htmlEl = el as HTMLElement;
+      if (htmlEl.children.length === 0 && htmlEl.textContent?.trim()) {
+        htmlEl.contentEditable = 'true';
+        htmlEl.setAttribute(EDIT_MARKER, '');
+      }
+    });
+
+    // Single input handler on the document (uses event delegation)
+    const handleInput = () => {
+      if (visualEditRef.current) {
+        scheduleSave(iframeDoc);
+      }
+    };
+
+    // Store handler reference for cleanup
+    (iframeDoc as any).__visualEditHandler = handleInput;
+    iframeDoc.addEventListener('input', handleInput);
+  }, [scheduleSave]);
+
+  // ── Disable visual editing: reload iframe with clean content ──
+  const disableEditMode = useCallback(() => {
+    // Cancel any pending save
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    const iframeDoc = iframe.contentDocument;
+    if (!iframeDoc) return;
+
+    // Do a final save of any pending changes before disabling
+    if (onSlideUpdateRef.current) {
+      const cleanHtml = getCleanHtml(iframeDoc);
+      onSlideUpdateRef.current({ htmlContent: cleanHtml });
+    }
+
+    // Remove the input handler
+    const handler = (iframeDoc as any).__visualEditHandler;
+    if (handler) {
+      iframeDoc.removeEventListener('input', handler);
+      delete (iframeDoc as any).__visualEditHandler;
+    }
+
+    // Remove our style tag
+    iframeDoc.getElementById(EDIT_STYLE_ID)?.remove();
+
+    // Remove contenteditable and marker from all elements
+    iframeDoc.querySelectorAll(`[${EDIT_MARKER}]`).forEach(el => {
+      (el as HTMLElement).contentEditable = 'inherit';
+      el.removeAttribute('contenteditable');
+      el.removeAttribute(EDIT_MARKER);
+    });
+  }, [getCleanHtml]);
+
+  // ── Main iframe initialization ──
   useEffect(() => {
     if (!slide.htmlContent || !iframeRef.current) return;
 
     const iframe = iframeRef.current;
+    iframeReadyRef.current = false;
     setIsLoading(true);
     setHasError(false);
     setErrorMessage('');
@@ -35,17 +172,15 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
       try {
         const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
         if (!iframeDoc) {
-          throw new Error('No se pudo acceder al documento del iframe. Posible problema de CORS o sandbox.');
+          throw new Error('No se pudo acceder al documento del iframe.');
         }
 
-        // Limpiar y escribir el contenido HTML completo
         iframeDoc.open();
         iframeDoc.write(slide.htmlContent);
         iframeDoc.close();
 
         const configureIframe = () => {
           try {
-            // Configurar estilos base del iframe
             const iframeBody = iframeDoc.body;
             if (iframeBody) {
               iframeBody.style.margin = '0';
@@ -57,24 +192,12 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
               iframeBody.style.overflow = isPresentation ? 'auto' : 'visible';
             }
 
-            // Configurar el documento del iframe
             const iframeHtml = iframeDoc.documentElement;
             if (iframeHtml) {
               iframeHtml.style.height = isPresentation ? '100vh' : 'auto';
               iframeHtml.style.overflow = isPresentation ? 'auto' : 'visible';
             }
 
-            // Habilitar edición visual si está activada
-            if (enableVisualEditing && isVisualEditMode && !readOnly) {
-              // Usar setTimeout para asegurar que el DOM esté completamente cargado
-              setTimeout(() => {
-                if (iframeRef.current && iframeRef.current.contentDocument && isVisualEditMode) {
-                  enableVisualEditingMode(iframeRef.current.contentDocument);
-                }
-              }, 100);
-            }
-
-            // Agregar meta viewport si no existe (importante para contenido responsive)
             if (!iframeDoc.querySelector('meta[name="viewport"]')) {
               const viewport = iframeDoc.createElement('meta');
               viewport.name = 'viewport';
@@ -82,20 +205,19 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
               iframeDoc.head?.appendChild(viewport);
             }
 
-            // Mejorar la ejecución de JavaScript
+            // Execute scripts
             const executeScripts = async () => {
               const scripts = Array.from(iframeDoc.querySelectorAll('script'));
-              
+
               if (scripts.length === 0) {
                 setTimeout(() => setIsLoading(false), 300);
+                iframeReadyRef.current = true;
                 return;
               }
 
-              // Separar scripts externos e inline
               const externalScripts = scripts.filter(s => s.src);
               const inlineScripts = scripts.filter(s => s.textContent && !s.src);
-              
-              // Cargar scripts externos primero
+
               for (const script of externalScripts) {
                 try {
                   await new Promise((resolve) => {
@@ -103,22 +225,11 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
                     newScript.src = script.src;
                     newScript.async = false;
                     newScript.defer = false;
-                    
-                    // Copiar atributos importantes
                     if (script.type) newScript.type = script.type;
                     if (script.crossOrigin) newScript.crossOrigin = script.crossOrigin;
                     if (script.integrity) newScript.integrity = script.integrity;
-                    
-                    newScript.onload = () => {
-                      resolve(true);
-                    };
-                    
-                    newScript.onerror = (error) => {
-                      console.warn(`Error cargando script: ${script.src}`, error);
-                      resolve(false); // Continuar aunque falle
-                    };
-                    
-                    // Reemplazar el script original
+                    newScript.onload = () => resolve(true);
+                    newScript.onerror = () => resolve(false);
                     if (script.parentNode) {
                       script.parentNode.replaceChild(newScript, script);
                     } else {
@@ -126,430 +237,123 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
                     }
                   });
                 } catch (error) {
-                  console.warn(`Error procesando script externo:`, error);
+                  console.warn('Error loading external script:', error);
                 }
               }
-              
-              // Ejecutar scripts inline después
+
               for (const script of inlineScripts) {
                 try {
                   const newScript = iframeDoc.createElement('script');
                   newScript.type = script.type || 'text/javascript';
-                  
-                  // Envolver el código en un try-catch para mejor manejo de errores
-                  const wrappedCode = `
-                    try {
-                      ${script.textContent}
-                    } catch (error) {
-                      console.warn('Error en script inline:', error);
-                    }
-                  `;
-                  
-                  newScript.textContent = wrappedCode;
-                  
+                  newScript.textContent = `try { ${script.textContent} } catch(e) { console.warn('Inline script error:', e); }`;
                   if (script.parentNode) {
                     script.parentNode.replaceChild(newScript, script);
                   } else {
                     iframeDoc.body.appendChild(newScript);
                   }
-                  
                 } catch (error) {
-                  console.warn('Error procesando script inline:', error);
+                  console.warn('Error processing inline script:', error);
                 }
               }
-              
-              // Disparar evento DOMContentLoaded si no se ha disparado
+
               setTimeout(() => {
                 try {
                   if (iframeDoc.defaultView) {
-                    const event = new iframeDoc.defaultView.Event('DOMContentLoaded', {
-                      bubbles: true,
-                      cancelable: true
-                    });
-                    iframeDoc.dispatchEvent(event);
-                    
-                    // También disparar load event
-                    const loadEvent = new iframeDoc.defaultView.Event('load', {
-                      bubbles: true,
-                      cancelable: true
-                    });
-                    iframeDoc.defaultView.dispatchEvent(loadEvent);
+                    iframeDoc.dispatchEvent(new iframeDoc.defaultView.Event('DOMContentLoaded', { bubbles: true }));
+                    iframeDoc.defaultView.dispatchEvent(new iframeDoc.defaultView.Event('load', { bubbles: true }));
                   }
                 } catch (e) {
-                  console.warn('Error disparando eventos:', e);
+                  // Silently ignore
                 }
-                
                 setIsLoading(false);
+                iframeReadyRef.current = true;
               }, 500);
             };
-            
+
             executeScripts();
 
-            // Ajustar altura automáticamente si no es presentación
+            // Auto-height for non-presentation mode
             if (!isPresentation) {
               const adjustHeight = () => {
                 try {
-                  if (iframeRef.current) {
-                    // Esperar un poco más para que el contenido se renderice completamente
-                    setTimeout(() => {
-                      const contentHeight = Math.max(
-                        iframeDoc.body?.scrollHeight || 0,
-                        iframeDoc.body?.offsetHeight || 0,
-                        iframeDoc.documentElement?.scrollHeight || 0,
-                        iframeDoc.documentElement?.offsetHeight || 0
-                      );
-                      
-                      if (contentHeight > 0 && iframeRef.current) {
-                        iframeRef.current.style.height = `${Math.max(contentHeight + 40, 600)}px`;
-                      }
-                    }, 1000); // Aumentar el tiempo para contenido dinámico
-                  }
-                } catch (error) {
-                  console.warn('Error ajustando altura:', error);
+                  if (!iframeRef.current) return;
+                  setTimeout(() => {
+                    const contentHeight = Math.max(
+                      iframeDoc.body?.scrollHeight || 0,
+                      iframeDoc.body?.offsetHeight || 0,
+                      iframeDoc.documentElement?.scrollHeight || 0,
+                      iframeDoc.documentElement?.offsetHeight || 0
+                    );
+                    if (contentHeight > 0 && iframeRef.current) {
+                      iframeRef.current.style.height = `${Math.max(contentHeight + 40, 600)}px`;
+                    }
+                  }, 1000);
+                } catch {
+                  // Ignore height errors
                 }
               };
-              
-              // Ajustar altura inicial
               setTimeout(adjustHeight, 100);
-              
-              // Observar cambios en el contenido
               if (window.ResizeObserver && iframeDoc.body) {
-                const resizeObserver = new ResizeObserver(adjustHeight);
-                resizeObserver.observe(iframeDoc.body);
+                const ro = new ResizeObserver(adjustHeight);
+                ro.observe(iframeDoc.body);
               }
             }
           } catch (error) {
-            console.error('Error configurando iframe:', error);
+            console.error('Error configuring iframe:', error);
             setHasError(true);
-            setErrorMessage(`Error configurando el contenido: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+            setErrorMessage(error instanceof Error ? error.message : 'Error desconocido');
             setIsLoading(false);
           }
         };
 
-        // Esperar a que el contenido se cargue completamente
         if (iframeDoc.readyState === 'complete') {
           setTimeout(configureIframe, 100);
         } else {
-          const handleLoad = () => {
-            setTimeout(configureIframe, 100);
-          };
-
-          iframe.addEventListener('load', handleLoad, { once: true });
-          iframeDoc.addEventListener('DOMContentLoaded', handleLoad, { once: true });
-
-          // Fallback timeout por si acaso
+          iframe.addEventListener('load', () => setTimeout(configureIframe, 100), { once: true });
           setTimeout(configureIframe, 2000);
         }
       } catch (error) {
-        console.error('Error inicializando iframe:', error);
+        console.error('Error initializing iframe:', error);
         setHasError(true);
-        setErrorMessage(`Error inicializando el iframe: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        setErrorMessage(error instanceof Error ? error.message : 'Error desconocido');
         setIsLoading(false);
       }
     };
 
-    // Inicializar después de un pequeño delay
     const timeoutId = setTimeout(initializeIframe, 50);
+    return () => { clearTimeout(timeoutId); };
+  }, [slide.htmlContent, isPresentation]);
 
-    return () => {
-      clearTimeout(timeoutId);
-    };
-  }, [slide.htmlContent, isPresentation, enableVisualEditing, readOnly]);
-
-  // Función para habilitar el modo de edición visual
-  const enableVisualEditingMode = (iframeDoc: Document) => {
-    try {
-      // Hacer todos los elementos de texto editables
-      const textElements = iframeDoc.querySelectorAll('p, h1, h2, h3, h4, h5, h6, span, div, li, td, th, a');
-      textElements.forEach((element) => {
-        const htmlElement = element as HTMLElement;
-        if (htmlElement.children.length === 0 || htmlElement.textContent?.trim()) {
-          htmlElement.contentEditable = 'true';
-          htmlElement.style.outline = '1px dashed #3b82f6';
-          htmlElement.style.outlineOffset = '2px';
-          htmlElement.style.cursor = 'text';
-          
-          // Agregar evento para guardar cambios
-          htmlElement.addEventListener('blur', async () => {
-            await saveVisualChanges(iframeDoc);
-          });
-        }
-      });
-
-      // Agregar botones de eliminar a elementos
-      const allElements = iframeDoc.querySelectorAll('*:not(html):not(head):not(body):not(script):not(style):not(meta):not(title)');
-      allElements.forEach((element) => {
-        const htmlElement = element as HTMLElement;
-        if (htmlElement.tagName !== 'BUTTON' && !htmlElement.classList.contains('delete-btn')) {
-          // Guardar la posición original si existe
-          if (htmlElement.style.position && htmlElement.style.position !== 'relative') {
-            htmlElement.setAttribute('data-original-position', htmlElement.style.position);
-          }
-          htmlElement.style.position = 'relative';
-          
-          // Crear botón de eliminar
-          const deleteBtn = iframeDoc.createElement('button');
-          deleteBtn.innerHTML = '×';
-          deleteBtn.className = 'delete-btn';
-          deleteBtn.style.cssText = `
-            position: absolute;
-            top: -10px;
-            right: -10px;
-            width: 20px;
-            height: 20px;
-            background: #ef4444;
-            color: white;
-            border: none;
-            border-radius: 50%;
-            font-size: 14px;
-            font-weight: bold;
-            cursor: pointer;
-            display: none;
-            z-index: 1000;
-            line-height: 1;
-          `;
-          
-          // Mostrar botón al hacer hover
-          htmlElement.addEventListener('mouseenter', () => {
-            deleteBtn.style.display = 'block';
-          });
-          
-          htmlElement.addEventListener('mouseleave', () => {
-            deleteBtn.style.display = 'none';
-          });
-          
-          // Eliminar elemento al hacer clic
-          deleteBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (confirm('¿Eliminar este elemento?')) {
-              htmlElement.remove();
-              await saveVisualChanges(iframeDoc);
-            }
-          });
-          
-          htmlElement.appendChild(deleteBtn);
-        }
-      });
-
-      // Agregar estilos para el modo de edición
-      const style = iframeDoc.createElement('style');
-      style.textContent = `
-        [contenteditable="true"]:hover {
-          background-color: rgba(59, 130, 246, 0.1) !important;
-        }
-        [contenteditable="true"]:focus {
-          outline: 2px solid #3b82f6 !important;
-          outline-offset: 2px !important;
-          background-color: rgba(59, 130, 246, 0.05) !important;
-        }
-      `;
-      iframeDoc.head?.appendChild(style);
-      
-    } catch (error) {
-      console.error('Error habilitando edición visual:', error);
-    }
-  };
-
-  // Función para re-ejecutar scripts después de cambios
-  const reExecuteScripts = async (iframeDoc: Document) => {
-    try {
-      // Encontrar todos los scripts en el documento
-      const scripts = Array.from(iframeDoc.querySelectorAll('script'));
-      
-      if (scripts.length === 0) return;
-      
-      
-      // Separar scripts externos e inline
-      const externalScripts = scripts.filter(s => s.src);
-      const inlineScripts = scripts.filter(s => s.textContent && !s.src);
-      
-      // Re-ejecutar scripts externos primero
-      for (const script of externalScripts) {
-        try {
-          if (script.src && !script.src.includes('tailwindcss')) {
-            const newScript = iframeDoc.createElement('script');
-            newScript.src = script.src;
-            newScript.async = false;
-            newScript.defer = false;
-            
-            if (script.type) newScript.type = script.type;
-            if (script.crossOrigin) newScript.crossOrigin = script.crossOrigin;
-            if (script.integrity) newScript.integrity = script.integrity;
-            
-            await new Promise((resolve) => {
-              newScript.onload = () => resolve(true);
-              newScript.onerror = () => resolve(false);
-              
-              if (script.parentNode) {
-                script.parentNode.replaceChild(newScript, script);
-              }
-            });
-          }
-        } catch (error) {
-          console.warn('Error re-ejecutando script externo:', error);
-        }
-      }
-      
-      // Re-ejecutar scripts inline
-      for (const script of inlineScripts) {
-        try {
-          const newScript = iframeDoc.createElement('script');
-          newScript.type = script.type || 'text/javascript';
-          
-          // Envolver en try-catch para manejo de errores
-          const wrappedCode = `
-            try {
-              ${script.textContent}
-            } catch (error) {
-              console.warn('Error en script inline después de edición:', error);
-            }
-          `;
-          
-          newScript.textContent = wrappedCode;
-          
-          if (script.parentNode) {
-            script.parentNode.replaceChild(newScript, script);
-          }
-          
-        } catch (error) {
-          console.warn('Error re-ejecutando script inline:', error);
-        }
-      }
-      
-      // Disparar eventos para re-inicializar componentes
-      setTimeout(() => {
-        try {
-          if (iframeDoc.defaultView) {
-            // Disparar evento personalizado para re-inicialización
-            const reinitEvent = new iframeDoc.defaultView.CustomEvent('slideContentChanged', {
-              bubbles: true,
-              detail: { timestamp: Date.now() }
-            });
-            iframeDoc.dispatchEvent(reinitEvent);
-            
-            // También disparar resize para componentes que dependan del tamaño
-            const resizeEvent = new iframeDoc.defaultView.Event('resize');
-            iframeDoc.defaultView.dispatchEvent(resizeEvent);
-          }
-        } catch (e) {
-          console.warn('Error disparando eventos de re-inicialización:', e);
-        }
-      }, 100);
-      
-    } catch (error) {
-      console.error('Error general re-ejecutando scripts:', error);
-    }
-  };
-  
-  // Función para guardar cambios visuales
-  const saveVisualChanges = async (iframeDoc: Document) => {
-    if (onSlideUpdate) {
-      // Limpiar elementos de edición antes de guardar
-      const deleteButtons = iframeDoc.querySelectorAll('.delete-btn');
-      deleteButtons.forEach(btn => btn.remove());
-      
-      // Limpiar estilos de edición
-      const editableElements = iframeDoc.querySelectorAll('[contenteditable="true"]');
-      editableElements.forEach(element => {
-        const htmlElement = element as HTMLElement;
-        htmlElement.style.outline = '';
-        htmlElement.style.outlineOffset = '';
-        htmlElement.style.cursor = '';
-      });
-      
-      const updatedHtml = iframeDoc.documentElement.outerHTML;
-      onSlideUpdate({ htmlContent: updatedHtml });
-      
-      // Re-ejecutar scripts después de guardar cambios
-      setTimeout(() => {
-        reExecuteScripts(iframeDoc);
-        
-        // Re-habilitar modo de edición si está activo
-        if (isVisualEditMode) {
-          setTimeout(() => enableVisualEditingMode(iframeDoc), 200);
-        }
-      }, 100);
-    }
-  };
-
-  // Función para desactivar el modo de edición visual
-  const disableVisualEditingMode = () => {
-    if (iframeRef.current) {
-      const iframeDoc = iframeRef.current.contentDocument;
-      if (iframeDoc) {
-        try {
-          // Remover contentEditable y estilos de todos los elementos editables
-          const editableElements = iframeDoc.querySelectorAll('[contenteditable="true"]');
-          editableElements.forEach((element) => {
-            const htmlElement = element as HTMLElement;
-            htmlElement.contentEditable = 'false';
-            htmlElement.removeAttribute('contenteditable');
-            htmlElement.style.outline = '';
-            htmlElement.style.outlineOffset = '';
-            htmlElement.style.cursor = '';
-          });
-          
-          // Remover todos los botones de eliminar
-          const deleteButtons = iframeDoc.querySelectorAll('.delete-btn');
-          deleteButtons.forEach(btn => btn.remove());
-          
-          // Remover estilos de posición relativa que se agregaron para los botones
-          const allElements = iframeDoc.querySelectorAll('*');
-          allElements.forEach((element) => {
-            const htmlElement = element as HTMLElement;
-            // Solo remover position: relative si fue agregado por nosotros
-            if (htmlElement.style.position === 'relative' && !htmlElement.hasAttribute('data-original-position')) {
-              htmlElement.style.position = '';
-            }
-          });
-          
-          // Remover los estilos CSS que agregamos para el modo de edición
-          const styleElements = iframeDoc.querySelectorAll('style');
-          styleElements.forEach((style) => {
-            if (style.textContent?.includes('[contenteditable="true"]')) {
-              style.remove();
-            }
-          });
-          
-          // Remover event listeners (esto se hace automáticamente al recargar el iframe)
-          // Pero podemos forzar una recarga del contenido para limpiar todo
-          // Limpiar completamente sin recargar el iframe para evitar bucles
-          // La recarga se maneja en el useEffect principal si es necesario
-          
-        } catch (error) {
-          console.error('Error deshabilitando edición visual:', error);
-          // En caso de error, forzar recarga del iframe
-          if (iframeRef.current) {
-            setTimeout(() => {
-              if (iframeRef.current && iframeRef.current.contentDocument) {
-                iframeRef.current.contentDocument.open();
-                iframeRef.current.contentDocument.write(slide.htmlContent);
-                iframeRef.current.contentDocument.close();
-              }
-            }, 100);
-          }
-        }
-      }
-    }
-  };
-
-  // Efecto separado para manejar cambios en el modo de edición visual
+  // ── Toggle visual editing when mode changes ──
   useEffect(() => {
-    if (iframeRef.current && iframeRef.current.contentDocument) {
-      if (isVisualEditMode && enableVisualEditing && !readOnly) {
-        // Activar modo de edición visual
-        setTimeout(() => {
-          if (iframeRef.current && iframeRef.current.contentDocument && isVisualEditMode) {
-            enableVisualEditingMode(iframeRef.current.contentDocument);
-          }
-        }, 100);
+    if (!enableVisualEditing || readOnly) return;
+
+    const applyEditMode = () => {
+      const iframeDoc = iframeRef.current?.contentDocument;
+      if (!iframeDoc) return;
+
+      if (isVisualEditMode) {
+        enableEditMode(iframeDoc);
       } else {
-        // Desactivar modo de edición visual
-        disableVisualEditingMode();
+        disableEditMode();
       }
+    };
+
+    // If iframe is already ready, apply immediately; otherwise wait
+    if (iframeReadyRef.current) {
+      applyEditMode();
+    } else {
+      const timer = setTimeout(applyEditMode, 700);
+      return () => clearTimeout(timer);
     }
-  }, [isVisualEditMode, enableVisualEditing, readOnly]);
+  }, [isVisualEditMode, enableVisualEditing, readOnly, enableEditMode, disableEditMode]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, []);
 
 
 

@@ -54,6 +54,7 @@ export default function SlideEditor({ slides, onSlideUpdate, onAddSlide, onDelet
 
   const changeSlide = (index: number) => {
     if (index >= 0 && index < slides.length) {
+      setIsVisualEditMode(false);
       setCurrentSlideIndex(index);
     }
   };
@@ -144,7 +145,7 @@ export default function SlideEditor({ slides, onSlideUpdate, onAddSlide, onDelet
           onAddSlide={readOnly ? undefined : onAddSlide}
           onDuplicateSlide={readOnly ? undefined : duplicateSlide}
           onDeleteSlide={readOnly ? undefined : () => handleDeleteSlide(currentSlide.id)}
-          onEditHTML={readOnly ? undefined : () => setShowHTMLEditor(true)}
+          onEditHTML={readOnly ? undefined : () => { setIsVisualEditMode(false); setShowHTMLEditor(true); }}
           onPresentationMode={() => setShowPresentation(true)}
           onSave={readOnly ? undefined : handleSave}
           canDelete={slides.length > 1 && !readOnly}
