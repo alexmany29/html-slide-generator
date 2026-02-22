@@ -79,18 +79,7 @@ export default function SharedViewer() {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    // Collect all <head> content from the first slide to reuse shared styles/scripts
-    // We parse the first slide to extract any <head> contents (stylesheets, fonts, etc.)
-    const extractHead = (html: string): string => {
-      const match = html.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
-      return match ? match[1] : '';
-    };
-
-    // Extract <body> content from slide HTML, or use the whole string if no body tags
-    const extractBody = (html: string): string => {
-      const match = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-      return match ? match[1] : html;
-    };
+    const parser = new DOMParser();
 
     // Sanitize: strip contenteditable artifacts
     const sanitize = (html: string): string =>
@@ -98,110 +87,152 @@ export default function SharedViewer() {
         .replace(/\s*contenteditable="[^"]*"/gi, '')
         .replace(/\s*data-visual-edit(="[^"]*")?/gi, '');
 
-    // Gather shared head from first slide
-    const sharedHead = slides.length > 0 ? extractHead(sanitize(slides[0].htmlContent)) : '';
+    // Collect unique styles from ALL slides, and extract body content
+    const stylesSeen = new Set<string>();
+    let allStyles = '';
 
-    // Build each slide as a page
-    const slidePages = slides.map((s, i) => `
-      <div class="slide-page">
-        <div class="slide-number">${i + 1} / ${slides.length}</div>
-        <div class="slide-content">${extractBody(sanitize(s.htmlContent))}</div>
-      </div>
-    `).join('\n');
+    const slidePages = slides.map((s, i) => {
+      const clean = sanitize(s.htmlContent || '');
+      const doc = parser.parseFromString(clean, 'text/html');
 
-    const printDoc = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>${presentation?.title || 'Presentación'} — PDF</title>
-  ${sharedHead}
-  <style>
-    @page {
-      size: 297mm 210mm;
-      margin: 0;
-    }
-    * { box-sizing: border-box; }
-    html, body {
-      margin: 0;
-      padding: 0;
-      font-family: system-ui, -apple-system, sans-serif;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-      color-adjust: exact !important;
-    }
-    .slide-page {
-      width: 297mm;
-      height: 210mm;
-      position: relative;
-      background: #ffffff;
-      overflow: hidden;
-      page-break-after: always;
-      break-after: page;
-    }
-    .slide-page:last-child {
-      page-break-after: auto;
-      break-after: auto;
-    }
-    .slide-content {
-      width: 297mm;
-      height: 210mm;
-      padding: 10mm;
-      transform-origin: top left;
-    }
-    .slide-number {
-      position: absolute;
-      bottom: 4mm;
-      right: 6mm;
-      font-size: 8px;
-      color: #d1d5db;
-      z-index: 10;
-    }
-    img { max-width: 100%; height: auto; }
-    /* Screen preview before printing */
-    @media screen {
-      body { background: #f3f4f6; padding: 20px; }
-      .slide-page {
-        margin: 0 auto 20px;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.15);
-        border-radius: 4px;
-      }
-    }
-  </style>
-</head>
-<body>
-  ${slidePages}
-  <script>
-    // Auto-scale each slide's content to fit within the page
-    window.onload = function() {
-      document.querySelectorAll('.slide-page').forEach(function(page) {
-        var content = page.querySelector('.slide-content');
-        if (!content) return;
-        // Temporarily remove overflow hidden to measure true size
-        page.style.overflow = 'visible';
-        var pageW = 297 * 3.7795; // mm to px (approx)
-        var pageH = 210 * 3.7795;
-        var padding = 10 * 3.7795 * 2; // 10mm padding on each side
-        var availW = pageW - padding;
-        var availH = pageH - padding;
-        var contentW = content.scrollWidth;
-        var contentH = content.scrollHeight;
-        var scaleX = contentW > availW ? availW / contentW : 1;
-        var scaleY = contentH > availH ? availH / contentH : 1;
-        var scale = Math.min(scaleX, scaleY, 1);
-        if (scale < 1) {
-          content.style.transform = 'scale(' + scale + ')';
+      // Gather <style> and <link rel="stylesheet"> from every slide's <head>
+      doc.querySelectorAll('style, link[rel="stylesheet"]').forEach(el => {
+        const key = el.outerHTML;
+        if (!stylesSeen.has(key)) {
+          stylesSeen.add(key);
+          allStyles += key + '\n';
         }
-        page.style.overflow = 'hidden';
       });
-      setTimeout(function() { window.print(); }, 600);
-    };
-  </script>
-</body>
-</html>`;
 
-    printWindow.document.open();
-    printWindow.document.write(printDoc);
-    printWindow.document.close();
+      // Body content (DOMParser always produces a valid body)
+      const bodyHtml = doc.body ? doc.body.innerHTML : clean;
+
+      return `<div class="slide-page"><div class="slide-number">${i + 1} / ${slides.length}</div><div class="slide-content">${bodyHtml}</div></div>`;
+    });
+
+    // Build the print-ready document using DOM to avoid template literal issues
+    const printDoc = printWindow.document;
+    printDoc.open();
+    printDoc.write('<!DOCTYPE html><html><head><meta charset="utf-8"></head><body></body></html>');
+    printDoc.close();
+
+    // Set title
+    printDoc.title = `${presentation?.title || 'Presentación'} — PDF`;
+
+    // Add collected styles from slides
+    const stylesContainer = printDoc.createElement('div');
+    stylesContainer.innerHTML = allStyles;
+    while (stylesContainer.firstChild) {
+      printDoc.head.appendChild(stylesContainer.firstChild);
+    }
+
+    // Add our print layout styles
+    const layoutStyle = printDoc.createElement('style');
+    layoutStyle.textContent = `
+      @page { size: 297mm 210mm; margin: 0; }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body {
+        margin: 0; padding: 0;
+        font-family: system-ui, -apple-system, sans-serif;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
+      .slide-page {
+        width: 297mm; height: 210mm;
+        position: relative; background: #fff;
+        overflow: hidden;
+        page-break-after: always; break-after: page;
+        page-break-inside: avoid; break-inside: avoid;
+      }
+      .slide-page:last-child {
+        page-break-after: auto; break-after: auto;
+      }
+      .slide-content {
+        width: 297mm; height: 210mm;
+        padding: 10mm;
+        transform-origin: top left;
+        overflow: visible;
+      }
+      .slide-number {
+        position: absolute; bottom: 4mm; right: 6mm;
+        font-size: 8px; color: #d1d5db; z-index: 10;
+      }
+      img { max-width: 100%; height: auto; }
+      @media screen {
+        body { background: #f3f4f6; padding: 20px; }
+        .slide-page {
+          margin: 0 auto 20px;
+          box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+          border-radius: 4px;
+        }
+      }
+    `;
+    printDoc.head.appendChild(layoutStyle);
+
+    // Insert all slide pages into body
+    const container = printDoc.createElement('div');
+    container.innerHTML = slidePages.join('');
+    while (container.firstChild) {
+      printDoc.body.appendChild(container.firstChild);
+    }
+
+    // Auto-scale each slide to fit within the page, then trigger print
+    const scaleScript = printDoc.createElement('script');
+    scaleScript.textContent = `
+      (function() {
+        function doScale() {
+          var pages = document.querySelectorAll('.slide-page');
+          var mmToPx = (function() {
+            var el = document.createElement('div');
+            el.style.width = '297mm';
+            el.style.position = 'absolute';
+            el.style.visibility = 'hidden';
+            document.body.appendChild(el);
+            var px = el.offsetWidth;
+            document.body.removeChild(el);
+            return px / 297;
+          })();
+          var pageW = 297 * mmToPx;
+          var pageH = 210 * mmToPx;
+          var pad = 10 * mmToPx;
+          var availW = pageW - pad * 2;
+          var availH = pageH - pad * 2;
+
+          pages.forEach(function(page) {
+            var content = page.querySelector('.slide-content');
+            if (!content) return;
+            page.style.overflow = 'visible';
+            content.style.overflow = 'visible';
+            content.style.width = 'auto';
+            content.style.height = 'auto';
+            var cw = content.scrollWidth;
+            var ch = content.scrollHeight;
+            var sx = cw > availW ? availW / cw : 1;
+            var sy = ch > availH ? availH / ch : 1;
+            var scale = Math.min(sx, sy, 1);
+            if (scale < 1) {
+              content.style.transform = 'scale(' + scale + ')';
+            }
+            content.style.width = ''; content.style.height = '';
+            content.style.overflow = '';
+            page.style.overflow = 'hidden';
+          });
+        }
+
+        // Wait for fonts/images to load before scaling + printing
+        if (document.fonts && document.fonts.ready) {
+          document.fonts.ready.then(function() {
+            setTimeout(function() { doScale(); setTimeout(function(){ window.print(); }, 300); }, 300);
+          });
+        } else {
+          window.onload = function() {
+            setTimeout(function() { doScale(); setTimeout(function(){ window.print(); }, 300); }, 500);
+          };
+        }
+      })();
+    `;
+    printDoc.body.appendChild(scaleScript);
   };
 
   // Loading state
