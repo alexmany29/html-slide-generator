@@ -191,18 +191,26 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
             const iframeBody = iframeDoc.body;
             if (iframeBody) {
               iframeBody.style.margin = '0';
-              iframeBody.style.padding = isPresentation ? '0' : '20px';
-              iframeBody.style.fontFamily = 'system-ui, -apple-system, sans-serif';
-              iframeBody.style.lineHeight = '1.6';
-              iframeBody.style.color = '#374151';
-              iframeBody.style.backgroundColor = '#ffffff';
-              iframeBody.style.overflow = isPresentation ? 'auto' : 'visible';
+              if (isPresentation) {
+                // Presentation / shared view: respect the slide's own styles.
+                // These are full web pages with Tailwind CDN, custom fonts,
+                // grid layouts, overflow hidden, etc. Only set padding 0.
+                iframeBody.style.padding = '0';
+              } else {
+                // Editor view: provide sensible defaults for simple slides
+                iframeBody.style.padding = '20px';
+                iframeBody.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+                iframeBody.style.lineHeight = '1.6';
+                iframeBody.style.color = '#374151';
+                iframeBody.style.backgroundColor = '#ffffff';
+                iframeBody.style.overflow = 'visible';
+              }
             }
 
             const iframeHtml = iframeDoc.documentElement;
-            if (iframeHtml) {
-              iframeHtml.style.height = isPresentation ? '100vh' : 'auto';
-              iframeHtml.style.overflow = isPresentation ? 'auto' : 'visible';
+            if (iframeHtml && !isPresentation) {
+              iframeHtml.style.height = 'auto';
+              iframeHtml.style.overflow = 'visible';
             }
 
             if (!iframeDoc.querySelector('meta[name="viewport"]')) {
@@ -453,9 +461,9 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
         className="w-full border-none bg-white"
 sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin allow-downloads allow-pointer-lock allow-presentation allow-top-navigation-by-user-activation allow-popups-to-escape-sandbox"
         style={{
-          height: isPresentation ? 'auto' : '100%',
+          height: isPresentation ? '100%' : '100%',
           display: (isLoading || hasError) ? 'none' : 'block',
-          minHeight: isPresentation ? '100vh' : '600px',
+          minHeight: isPresentation ? '0' : '600px',
           width: '100%',
         }}
       />
