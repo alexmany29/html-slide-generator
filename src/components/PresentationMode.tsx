@@ -245,8 +245,8 @@ export default function PresentationMode({ slides, currentSlideIndex, onClose, o
       <div className="flex-1 overflow-auto bg-white">
         <SlideViewer
           slide={currentSlide}
-          onSlideUpdate={() => {}}
           isPresentation={true}
+          readOnly={true}
         />
       </div>
 

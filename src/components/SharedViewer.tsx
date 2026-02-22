@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { shareLinkService, Presentation } from '../lib/supabase';
 import { dbSlideToUi } from '../types';
 import type { Slide as UiSlide } from '../types';
-import { Layers, ChevronLeft, ChevronRight, Maximize, Minimize, FileText, AlertTriangle } from 'lucide-react';
+import { Layers, ChevronLeft, ChevronRight, Maximize, Minimize, FileText, AlertTriangle, Download } from 'lucide-react';
 import SlideViewer from './SlideViewer';
 
 export default function SharedViewer() {
@@ -75,6 +75,16 @@ export default function SharedViewer() {
     }
   };
 
+  const downloadPdf = () => {
+    // Find the iframe inside the slide viewer and print it
+    const iframe = document.querySelector<HTMLIFrameElement>('.shared-slide-viewer iframe');
+    if (iframe?.contentWindow) {
+      iframe.contentWindow.print();
+    } else {
+      window.print();
+    }
+  };
+
   // Loading state
   if (loading) {
     return (
@@ -134,6 +144,13 @@ export default function SharedViewer() {
             </span>
           )}
           <button
+            onClick={downloadPdf}
+            className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all"
+            title="Descargar como PDF"
+          >
+            <Download size={16} />
+          </button>
+          <button
             onClick={toggleFullscreen}
             className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all"
             title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
@@ -166,7 +183,7 @@ export default function SharedViewer() {
         )}
 
         {/* Slide viewer */}
-        <div className="w-full max-w-5xl aspect-video bg-white rounded-xl overflow-hidden shadow-2xl shadow-black/30">
+        <div className="shared-slide-viewer w-full max-w-5xl aspect-video bg-white rounded-xl overflow-hidden shadow-2xl shadow-black/30">
           {currentSlide && (
             <SlideViewer
               key={currentSlide.id}

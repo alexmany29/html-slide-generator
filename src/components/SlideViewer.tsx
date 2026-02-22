@@ -35,6 +35,13 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
 
   const isEmpty = !slide.htmlContent || slide.htmlContent.trim() === '';
 
+  // ── Sanitize HTML: strip any leftover contenteditable / edit markers ──
+  const sanitizeHtml = useCallback((html: string): string => {
+    return html
+      .replace(/\s*contenteditable="[^"]*"/gi, '')
+      .replace(/\s*data-visual-edit(="[^"]*")?/gi, '');
+  }, []);
+
   // ── Extract clean HTML from iframe (strips all our edit artifacts) ──
   const getCleanHtml = useCallback((iframeDoc: Document): string => {
     // Clone the document so we don't mutate the live DOM
@@ -176,7 +183,7 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
         }
 
         iframeDoc.open();
-        iframeDoc.write(slide.htmlContent);
+        iframeDoc.write(sanitizeHtml(slide.htmlContent));
         iframeDoc.close();
 
         const configureIframe = () => {
