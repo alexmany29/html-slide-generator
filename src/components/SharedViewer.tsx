@@ -79,21 +79,17 @@ export default function SharedViewer() {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    // Sanitize: strip contenteditable artifacts
     const sanitize = (html: string): string =>
       html
         .replace(/\s*contenteditable="[^"]*"/gi, '')
         .replace(/\s*data-visual-edit(="[^"]*")?/gi, '');
 
-    // Build print document with one iframe per slide
-    // Each iframe renders the COMPLETE slide HTML (with its own Tailwind CDN, Chart.js, fonts, etc.)
     const printDoc = printWindow.document;
     printDoc.open();
     printDoc.write('<!DOCTYPE html><html><head><meta charset="utf-8"></head><body></body></html>');
     printDoc.close();
     printDoc.title = `${presentation?.title || 'Presentación'} — PDF`;
 
-    // Layout styles for the print wrapper
     const style = printDoc.createElement('style');
     style.textContent = `
       @page { size: 297mm 210mm; margin: 0; }
@@ -113,6 +109,7 @@ export default function SharedViewer() {
         break-after: page;
         page-break-inside: avoid;
         break-inside: avoid;
+        background: #fff;
       }
       .slide-wrapper:last-child {
         page-break-after: auto;
@@ -129,7 +126,7 @@ export default function SharedViewer() {
         bottom: 3mm;
         right: 5mm;
         font-size: 7px;
-        color: #ccc;
+        color: #aaa;
         font-family: system-ui, sans-serif;
         z-index: 10;
       }
@@ -139,7 +136,7 @@ export default function SharedViewer() {
         background: #4f46e5;
         color: white;
         text-align: center;
-        padding: 10px;
+        padding: 12px;
         font-family: system-ui, sans-serif;
         font-size: 14px;
         z-index: 1000;
@@ -150,9 +147,7 @@ export default function SharedViewer() {
           margin: 0 auto 24px;
           box-shadow: 0 4px 20px rgba(0,0,0,0.4);
           border-radius: 6px;
-          background: #fff;
         }
-        .loading-msg { border-radius: 0 0 8px 8px; }
       }
       @media print {
         .loading-msg { display: none !important; }
@@ -163,31 +158,67 @@ export default function SharedViewer() {
     // Loading indicator
     const loadingMsg = printDoc.createElement('div');
     loadingMsg.className = 'loading-msg';
-    loadingMsg.textContent = `Preparando ${slides.length} slides para PDF... Por favor espera.`;
+    loadingMsg.textContent = `Preparando ${slides.length} slides para PDF...`;
     printDoc.body.appendChild(loadingMsg);
 
-    // Track loaded iframes
-    let loadedCount = 0;
+    let readyCount = 0;
     const totalSlides = slides.length;
+    const iframes: HTMLIFrameElement[] = [];
 
-    const onAllLoaded = () => {
-      loadingMsg.textContent = 'Todas las slides cargadas. Abriendo dialogo de impresion...';
-      // Give extra time for Tailwind CDN + Chart.js to render
+    // After ALL iframes loaded + scripts ran, inject zoom inside each iframe
+    const applyZoomAndPrint = () => {
+      loadingMsg.textContent = 'Ajustando slides al tamaño de pagina...';
+
+      iframes.forEach((iframe) => {
+        try {
+          const iDoc = iframe.contentDocument;
+          if (!iDoc || !iDoc.body) return;
+
+          // Measure real content height inside the iframe
+          const scrollH = Math.max(
+            iDoc.documentElement.scrollHeight,
+            iDoc.body.scrollHeight
+          );
+          const scrollW = Math.max(
+            iDoc.documentElement.scrollWidth,
+            iDoc.body.scrollWidth
+          );
+
+          // iframe visible area (matches wrapper: 297mm x 210mm)
+          const viewH = iframe.clientHeight || 793;
+          const viewW = iframe.clientWidth || 1122;
+
+          // Only zoom if content overflows
+          if (scrollH > viewH || scrollW > viewW) {
+            const zoomX = viewW / scrollW;
+            const zoomY = viewH / scrollH;
+            const zoom = Math.min(zoomX, zoomY, 1);
+
+            // Inject zoom CSS directly into the iframe's document
+            const zoomStyle = iDoc.createElement('style');
+            zoomStyle.setAttribute('id', 'pdf-fit-zoom');
+            zoomStyle.textContent = `
+              html {
+                zoom: ${zoom} !important;
+                overflow: hidden !important;
+              }
+            `;
+            iDoc.head.appendChild(zoomStyle);
+          }
+        } catch (e) {
+          // Cross-origin or other error, skip this iframe
+        }
+      });
+
+      // Wait for zoom reflow, then print
+      loadingMsg.textContent = 'Listo. Abriendo dialogo de impresion...';
       setTimeout(() => {
         loadingMsg.style.display = 'none';
         printWindow.print();
-      }, 2000);
+      }, 1000);
     };
 
-    const onIframeLoad = () => {
-      loadedCount++;
-      loadingMsg.textContent = `Cargando slides: ${loadedCount} / ${totalSlides}...`;
-      if (loadedCount >= totalSlides) {
-        onAllLoaded();
-      }
-    };
-
-    // Create one iframe per slide with its FULL HTML
+    // Create one iframe per slide
     slides.forEach((s, i) => {
       const wrapper = printDoc.createElement('div');
       wrapper.className = 'slide-wrapper';
@@ -197,25 +228,34 @@ export default function SharedViewer() {
       label.textContent = `${i + 1} / ${totalSlides}`;
       wrapper.appendChild(label);
 
-      const iframe = printDoc.createElement('iframe');
-      iframe.addEventListener('load', onIframeLoad);
+      const iframe = printDoc.createElement('iframe') as HTMLIFrameElement;
+      iframes.push(iframe);
+
+      iframe.addEventListener('load', () => {
+        // Wait for Tailwind CDN + Chart.js + fonts to fully process
+        setTimeout(() => {
+          readyCount++;
+          loadingMsg.textContent = `Cargando slides: ${readyCount} / ${totalSlides}...`;
+          if (readyCount >= totalSlides) {
+            applyZoomAndPrint();
+          }
+        }, 3000);
+      });
+
       wrapper.appendChild(iframe);
       printDoc.body.appendChild(wrapper);
 
-      // Use srcdoc to load the complete slide HTML in the iframe
+      // srcdoc renders the complete slide HTML with all its own scripts
       iframe.srcdoc = sanitize(s.htmlContent || '<p>Slide vacia</p>');
     });
 
-    // Safety timeout: if iframes don't all load in 15s, print anyway
+    // Safety timeout: if something hangs, print what we have after 25s
     setTimeout(() => {
-      if (loadedCount < totalSlides) {
-        loadingMsg.textContent = 'Tiempo de espera excedido. Imprimiendo lo disponible...';
-        setTimeout(() => {
-          loadingMsg.style.display = 'none';
-          printWindow.print();
-        }, 500);
+      if (readyCount < totalSlides) {
+        readyCount = totalSlides;
+        applyZoomAndPrint();
       }
-    }, 15000);
+    }, 25000);
   };
 
   // Loading state
