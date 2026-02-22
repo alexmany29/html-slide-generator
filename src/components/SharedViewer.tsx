@@ -299,29 +299,29 @@ export default function SharedViewer() {
       </header>
 
       {/* Slide content */}
-      <div className="flex-1 relative flex items-center justify-center p-4">
+      <div className="flex-1 relative flex">
         {/* Navigation arrows */}
         {!isSingleSlide && slides.length > 1 && (
           <>
             <button
               onClick={() => setCurrentIndex(prev => Math.max(prev - 1, 0))}
               disabled={currentIndex === 0}
-              className="absolute left-4 z-10 p-2.5 bg-gray-800/70 hover:bg-gray-700 text-white rounded-full transition-all disabled:opacity-20 disabled:cursor-default backdrop-blur-sm"
+              className="absolute left-2 top-1/2 -translate-y-1/2 z-10 p-2.5 bg-gray-800/70 hover:bg-gray-700 text-white rounded-full transition-all disabled:opacity-20 disabled:cursor-default backdrop-blur-sm"
             >
               <ChevronLeft size={22} />
             </button>
             <button
               onClick={() => setCurrentIndex(prev => Math.min(prev + 1, slides.length - 1))}
               disabled={currentIndex === slides.length - 1}
-              className="absolute right-4 z-10 p-2.5 bg-gray-800/70 hover:bg-gray-700 text-white rounded-full transition-all disabled:opacity-20 disabled:cursor-default backdrop-blur-sm"
+              className="absolute right-2 top-1/2 -translate-y-1/2 z-10 p-2.5 bg-gray-800/70 hover:bg-gray-700 text-white rounded-full transition-all disabled:opacity-20 disabled:cursor-default backdrop-blur-sm"
             >
               <ChevronRight size={22} />
             </button>
           </>
         )}
 
-        {/* Slide viewer */}
-        <div className="shared-slide-viewer w-full max-w-5xl aspect-video bg-white rounded-xl overflow-hidden shadow-2xl shadow-black/30">
+        {/* Slide viewer — fills all available space */}
+        <div className="shared-slide-viewer flex-1 bg-white overflow-hidden">
           {currentSlide && (
             <SlideViewer
               key={currentSlide.id}
