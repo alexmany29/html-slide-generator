@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { dbSlideToUi, uiSlideToDbUpdates } from '../types';
 import type { Slide as UiSlide } from '../types';
 import { ArrowLeft, Save, Eye, FileText, Plus, Link2 } from 'lucide-react';
+import { useToast } from './Toast';
 import SlideEditor from './SlideEditor';
 import ShareLinkModal from './ShareLinkModal';
 
@@ -12,6 +13,7 @@ export default function PresentationEditor() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const toast = useToast();
   const [presentation, setPresentation] = useState<Presentation | null>(null);
   const [slides, setSlides] = useState<Slide[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,7 +131,7 @@ export default function PresentationEditor() {
       setSlides(prev => [...prev, newSlide]);
     } catch (error) {
       console.error('Error adding slide:', error);
-      alert('Error al crear la slide. Por favor, inténtalo de nuevo.');
+      toast.error('Error al crear la slide');
     }
   };
 
@@ -141,7 +143,7 @@ export default function PresentationEditor() {
       setSlides(prev => prev.filter(slide => slide.id !== slideId));
     } catch (error) {
       console.error('Error deleting slide:', error);
-      alert('Error al eliminar la slide. Por favor, inténtalo de nuevo.');
+      toast.error('Error al eliminar la slide');
     }
   };
 
@@ -173,7 +175,7 @@ export default function PresentationEditor() {
     } catch (error) {
       console.error('Error reordering slides:', error);
       setSlides(originalSlides);
-      alert('Error al reordenar las slides. Se ha revertido el cambio.');
+      toast.error('Error al reordenar. Cambio revertido.');
     }
   };
 
@@ -210,16 +212,18 @@ export default function PresentationEditor() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
+        <div className="max-w-full px-4 sm:px-6">
+          <div className="flex justify-between items-center h-14">
+            <div className="flex items-center space-x-3">
               <button
                 onClick={() => navigate('/')}
-                className="text-gray-500 hover:text-gray-700 transition-colors"
+                className="flex items-center space-x-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors px-2 py-1.5 rounded-lg hover:bg-gray-100"
               >
-                <ArrowLeft size={18} className="mr-1.5" /> Volver
+                <ArrowLeft size={16} />
+                <span className="hidden sm:inline">Dashboard</span>
               </button>
+              <div className="w-px h-5 bg-gray-200" />
               <div>
                 {canEdit ? (
                   <input
@@ -286,7 +290,7 @@ export default function PresentationEditor() {
                   <span>Solo lectura</span>
                 </span>
               )}
-              <span className="text-sm text-gray-600">
+              <span className="text-xs text-gray-400 hidden md:block">
                 {user?.email}
               </span>
             </div>
