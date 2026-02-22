@@ -79,160 +79,143 @@ export default function SharedViewer() {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    const parser = new DOMParser();
-
     // Sanitize: strip contenteditable artifacts
     const sanitize = (html: string): string =>
       html
         .replace(/\s*contenteditable="[^"]*"/gi, '')
         .replace(/\s*data-visual-edit(="[^"]*")?/gi, '');
 
-    // Collect unique styles from ALL slides, and extract body content
-    const stylesSeen = new Set<string>();
-    let allStyles = '';
-
-    const slidePages = slides.map((s, i) => {
-      const clean = sanitize(s.htmlContent || '');
-      const doc = parser.parseFromString(clean, 'text/html');
-
-      // Gather <style> and <link rel="stylesheet"> from every slide's <head>
-      doc.querySelectorAll('style, link[rel="stylesheet"]').forEach(el => {
-        const key = el.outerHTML;
-        if (!stylesSeen.has(key)) {
-          stylesSeen.add(key);
-          allStyles += key + '\n';
-        }
-      });
-
-      // Body content (DOMParser always produces a valid body)
-      const bodyHtml = doc.body ? doc.body.innerHTML : clean;
-
-      return `<div class="slide-page"><div class="slide-number">${i + 1} / ${slides.length}</div><div class="slide-content">${bodyHtml}</div></div>`;
-    });
-
-    // Build the print-ready document using DOM to avoid template literal issues
+    // Build print document with one iframe per slide
+    // Each iframe renders the COMPLETE slide HTML (with its own Tailwind CDN, Chart.js, fonts, etc.)
     const printDoc = printWindow.document;
     printDoc.open();
     printDoc.write('<!DOCTYPE html><html><head><meta charset="utf-8"></head><body></body></html>');
     printDoc.close();
-
-    // Set title
     printDoc.title = `${presentation?.title || 'Presentación'} — PDF`;
 
-    // Add collected styles from slides
-    const stylesContainer = printDoc.createElement('div');
-    stylesContainer.innerHTML = allStyles;
-    while (stylesContainer.firstChild) {
-      printDoc.head.appendChild(stylesContainer.firstChild);
-    }
-
-    // Add our print layout styles
-    const layoutStyle = printDoc.createElement('style');
-    layoutStyle.textContent = `
+    // Layout styles for the print wrapper
+    const style = printDoc.createElement('style');
+    style.textContent = `
       @page { size: 297mm 210mm; margin: 0; }
-      * { box-sizing: border-box; margin: 0; padding: 0; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body {
         margin: 0; padding: 0;
-        font-family: system-ui, -apple-system, sans-serif;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
         color-adjust: exact !important;
       }
-      .slide-page {
-        width: 297mm; height: 210mm;
-        position: relative; background: #fff;
+      .slide-wrapper {
+        width: 297mm;
+        height: 210mm;
+        position: relative;
         overflow: hidden;
-        page-break-after: always; break-after: page;
-        page-break-inside: avoid; break-inside: avoid;
+        page-break-after: always;
+        break-after: page;
+        page-break-inside: avoid;
+        break-inside: avoid;
       }
-      .slide-page:last-child {
-        page-break-after: auto; break-after: auto;
+      .slide-wrapper:last-child {
+        page-break-after: auto;
+        break-after: auto;
       }
-      .slide-content {
-        width: 297mm; height: 210mm;
-        padding: 10mm;
-        transform-origin: top left;
-        overflow: visible;
+      .slide-wrapper iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+        display: block;
       }
-      .slide-number {
-        position: absolute; bottom: 4mm; right: 6mm;
-        font-size: 8px; color: #d1d5db; z-index: 10;
+      .slide-label {
+        position: absolute;
+        bottom: 3mm;
+        right: 5mm;
+        font-size: 7px;
+        color: #ccc;
+        font-family: system-ui, sans-serif;
+        z-index: 10;
       }
-      img { max-width: 100%; height: auto; }
+      .loading-msg {
+        position: fixed;
+        top: 0; left: 0; right: 0;
+        background: #4f46e5;
+        color: white;
+        text-align: center;
+        padding: 10px;
+        font-family: system-ui, sans-serif;
+        font-size: 14px;
+        z-index: 1000;
+      }
       @media screen {
-        body { background: #f3f4f6; padding: 20px; }
-        .slide-page {
-          margin: 0 auto 20px;
-          box-shadow: 0 2px 12px rgba(0,0,0,0.15);
-          border-radius: 4px;
+        body { background: #1a1a2e; padding: 20px; }
+        .slide-wrapper {
+          margin: 0 auto 24px;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+          border-radius: 6px;
+          background: #fff;
         }
+        .loading-msg { border-radius: 0 0 8px 8px; }
+      }
+      @media print {
+        .loading-msg { display: none !important; }
       }
     `;
-    printDoc.head.appendChild(layoutStyle);
+    printDoc.head.appendChild(style);
 
-    // Insert all slide pages into body
-    const container = printDoc.createElement('div');
-    container.innerHTML = slidePages.join('');
-    while (container.firstChild) {
-      printDoc.body.appendChild(container.firstChild);
-    }
+    // Loading indicator
+    const loadingMsg = printDoc.createElement('div');
+    loadingMsg.className = 'loading-msg';
+    loadingMsg.textContent = `Preparando ${slides.length} slides para PDF... Por favor espera.`;
+    printDoc.body.appendChild(loadingMsg);
 
-    // Auto-scale each slide to fit within the page, then trigger print
-    const scaleScript = printDoc.createElement('script');
-    scaleScript.textContent = `
-      (function() {
-        function doScale() {
-          var pages = document.querySelectorAll('.slide-page');
-          var mmToPx = (function() {
-            var el = document.createElement('div');
-            el.style.width = '297mm';
-            el.style.position = 'absolute';
-            el.style.visibility = 'hidden';
-            document.body.appendChild(el);
-            var px = el.offsetWidth;
-            document.body.removeChild(el);
-            return px / 297;
-          })();
-          var pageW = 297 * mmToPx;
-          var pageH = 210 * mmToPx;
-          var pad = 10 * mmToPx;
-          var availW = pageW - pad * 2;
-          var availH = pageH - pad * 2;
+    // Track loaded iframes
+    let loadedCount = 0;
+    const totalSlides = slides.length;
 
-          pages.forEach(function(page) {
-            var content = page.querySelector('.slide-content');
-            if (!content) return;
-            page.style.overflow = 'visible';
-            content.style.overflow = 'visible';
-            content.style.width = 'auto';
-            content.style.height = 'auto';
-            var cw = content.scrollWidth;
-            var ch = content.scrollHeight;
-            var sx = cw > availW ? availW / cw : 1;
-            var sy = ch > availH ? availH / ch : 1;
-            var scale = Math.min(sx, sy, 1);
-            if (scale < 1) {
-              content.style.transform = 'scale(' + scale + ')';
-            }
-            content.style.width = ''; content.style.height = '';
-            content.style.overflow = '';
-            page.style.overflow = 'hidden';
-          });
-        }
+    const onAllLoaded = () => {
+      loadingMsg.textContent = 'Todas las slides cargadas. Abriendo dialogo de impresion...';
+      // Give extra time for Tailwind CDN + Chart.js to render
+      setTimeout(() => {
+        loadingMsg.style.display = 'none';
+        printWindow.print();
+      }, 2000);
+    };
 
-        // Wait for fonts/images to load before scaling + printing
-        if (document.fonts && document.fonts.ready) {
-          document.fonts.ready.then(function() {
-            setTimeout(function() { doScale(); setTimeout(function(){ window.print(); }, 300); }, 300);
-          });
-        } else {
-          window.onload = function() {
-            setTimeout(function() { doScale(); setTimeout(function(){ window.print(); }, 300); }, 500);
-          };
-        }
-      })();
-    `;
-    printDoc.body.appendChild(scaleScript);
+    const onIframeLoad = () => {
+      loadedCount++;
+      loadingMsg.textContent = `Cargando slides: ${loadedCount} / ${totalSlides}...`;
+      if (loadedCount >= totalSlides) {
+        onAllLoaded();
+      }
+    };
+
+    // Create one iframe per slide with its FULL HTML
+    slides.forEach((s, i) => {
+      const wrapper = printDoc.createElement('div');
+      wrapper.className = 'slide-wrapper';
+
+      const label = printDoc.createElement('div');
+      label.className = 'slide-label';
+      label.textContent = `${i + 1} / ${totalSlides}`;
+      wrapper.appendChild(label);
+
+      const iframe = printDoc.createElement('iframe');
+      iframe.addEventListener('load', onIframeLoad);
+      wrapper.appendChild(iframe);
+      printDoc.body.appendChild(wrapper);
+
+      // Use srcdoc to load the complete slide HTML in the iframe
+      iframe.srcdoc = sanitize(s.htmlContent || '<p>Slide vacia</p>');
+    });
+
+    // Safety timeout: if iframes don't all load in 15s, print anyway
+    setTimeout(() => {
+      if (loadedCount < totalSlides) {
+        loadingMsg.textContent = 'Tiempo de espera excedido. Imprimiendo lo disponible...';
+        setTimeout(() => {
+          loadingMsg.style.display = 'none';
+          printWindow.print();
+        }, 500);
+      }
+    }, 15000);
   };
 
   // Loading state
