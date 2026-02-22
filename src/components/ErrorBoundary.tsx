@@ -42,7 +42,7 @@ export default class ErrorBoundary extends React.Component<
                 this.setState({ hasError: false, error: null });
                 window.location.href = '/';
               }}
-              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
+              className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-medium transition-colors"
             >
               Volver al inicio
             </button>

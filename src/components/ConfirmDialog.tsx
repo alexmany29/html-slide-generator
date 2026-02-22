@@ -31,9 +31,9 @@ export default function ConfirmDialog({
       button: 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-500',
     },
     default: {
-      icon: <AlertTriangle size={22} className="text-blue-500" />,
-      iconBg: 'bg-blue-100',
-      button: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500',
+      icon: <AlertTriangle size={22} className="text-indigo-500" />,
+      iconBg: 'bg-indigo-100',
+      button: 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500',
     },
   };
 

@@ -183,8 +183,8 @@ export default function PresentationEditor() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando presentación...</p>
+          <div className="w-8 h-8 border-2 border-gray-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-sm text-gray-500">Cargando presentacion...</p>
         </div>
       </div>
     );
@@ -197,7 +197,7 @@ export default function PresentationEditor() {
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Presentación no encontrada</h2>
           <button
             onClick={() => navigate('/')}
-            className="text-blue-600 hover:text-blue-700"
+            className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
           >
             Volver al dashboard
           </button>
@@ -230,7 +230,7 @@ export default function PresentationEditor() {
                     type="text"
                     value={presentation.title}
                     onChange={(e) => updatePresentationInfo({ title: e.target.value })}
-                    className="text-xl font-semibold text-gray-900 bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1"
+                    className="text-xl font-semibold text-gray-900 bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded px-2 py-1"
                   />
                 ) : (
                   <h1 className="text-xl font-semibold text-gray-900 px-2 py-1">{presentation.title}</h1>
@@ -242,7 +242,7 @@ export default function PresentationEditor() {
                       value={presentation.description || ''}
                       onChange={(e) => updatePresentationInfo({ description: e.target.value })}
                       placeholder="Descripción..."
-                      className="block text-sm text-gray-600 bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1 mt-1"
+                      className="block text-sm text-gray-600 bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded px-2 py-1 mt-1"
                     />
                   ) : (
                     <p className="block text-sm text-gray-600 px-2 py-1 mt-1">{presentation.description || ''}</p>
@@ -256,7 +256,7 @@ export default function PresentationEditor() {
                   <button
                     onClick={savePresentation}
                     disabled={saving}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm flex items-center space-x-2"
+                    className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm flex items-center space-x-2"
                   >
                     {saving ? (
                       <>
@@ -322,7 +322,7 @@ export default function PresentationEditor() {
             {canEdit && (
               <button
                 onClick={addSlide}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-all flex items-center space-x-2 mx-auto shadow-sm hover:shadow-md"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors flex items-center space-x-2 mx-auto"
               >
                 <Plus size={18} />
                 <span>Crear primera slide</span>

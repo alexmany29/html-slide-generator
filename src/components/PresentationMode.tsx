@@ -161,7 +161,7 @@ export default function PresentationMode({ slides, currentSlideIndex, onClose, o
           <p className="text-gray-600 mb-4">No hay slides para mostrar</p>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium transition-colors"
           >
             Cerrar
           </button>
@@ -177,7 +177,7 @@ export default function PresentationMode({ slides, currentSlideIndex, onClose, o
           <p className="text-gray-600 mb-4">Índice de slide inválido</p>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium transition-colors"
           >
             Cerrar
           </button>
