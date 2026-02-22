@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { shareLinkService, Presentation } from '../lib/supabase';
 import { dbSlideToUi } from '../types';
 import type { Slide as UiSlide } from '../types';
-import { Layers, ChevronLeft, ChevronRight, Maximize, Minimize, FileText, AlertTriangle, Download } from 'lucide-react';
+import { Layers, ChevronLeft, ChevronRight, Maximize, Minimize, FileText, AlertTriangle, Download, Loader2 } from 'lucide-react';
 import SlideViewer from './SlideViewer';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 export default function SharedViewer() {
   const { token } = useParams<{ token: string }>();
@@ -15,6 +17,7 @@ export default function SharedViewer() {
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSingleSlide, setIsSingleSlide] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -75,188 +78,88 @@ export default function SharedViewer() {
     }
   };
 
-  const downloadPdf = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
+  const downloadPdf = useCallback(async () => {
+    if (downloading || slides.length === 0) return;
+    setDownloading(true);
 
     const sanitize = (html: string): string =>
       html
         .replace(/\s*contenteditable="[^"]*"/gi, '')
         .replace(/\s*data-visual-edit(="[^"]*")?/gi, '');
 
-    const printDoc = printWindow.document;
-    printDoc.open();
-    printDoc.write('<!DOCTYPE html><html><head><meta charset="utf-8"></head><body></body></html>');
-    printDoc.close();
-    printDoc.title = `${presentation?.title || 'Presentación'} — PDF`;
+    try {
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const PAGE_W = 297;
+      const PAGE_H = 210;
 
-    const style = printDoc.createElement('style');
-    style.textContent = `
-      @page { size: 297mm 210mm; margin: 0; }
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body {
-        margin: 0; padding: 0;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-        color-adjust: exact !important;
-      }
-      .slide-wrapper {
-        width: 297mm;
-        height: 210mm;
-        position: relative;
-        overflow: hidden;
-        page-break-after: always;
-        break-after: page;
-        page-break-inside: avoid;
-        break-inside: avoid;
-        background: #fff;
-      }
-      .slide-wrapper:last-child {
-        page-break-after: auto;
-        break-after: auto;
-      }
-      .slide-wrapper iframe {
-        width: 100%;
-        height: 100%;
-        border: none;
-        display: block;
-      }
-      .slide-label {
-        position: absolute;
-        bottom: 3mm;
-        right: 5mm;
-        font-size: 7px;
-        color: #aaa;
-        font-family: system-ui, sans-serif;
-        z-index: 10;
-      }
-      .loading-msg {
-        position: fixed;
-        top: 0; left: 0; right: 0;
-        background: #4f46e5;
-        color: white;
-        text-align: center;
-        padding: 12px;
-        font-family: system-ui, sans-serif;
-        font-size: 14px;
-        z-index: 1000;
-      }
-      @media screen {
-        body { background: #1a1a2e; padding: 20px; }
-        .slide-wrapper {
-          margin: 0 auto 24px;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-          border-radius: 6px;
-        }
-      }
-      @media print {
-        .loading-msg { display: none !important; }
-      }
-    `;
-    printDoc.head.appendChild(style);
+      for (let i = 0; i < slides.length; i++) {
+        if (i > 0) pdf.addPage();
 
-    // Loading indicator
-    const loadingMsg = printDoc.createElement('div');
-    loadingMsg.className = 'loading-msg';
-    loadingMsg.textContent = `Preparando ${slides.length} slides para PDF...`;
-    printDoc.body.appendChild(loadingMsg);
+        // Create hidden iframe to render the slide with all its scripts
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText = 'position:fixed;left:0;top:0;width:1280px;height:720px;border:none;opacity:0;pointer-events:none;z-index:-1;';
+        document.body.appendChild(iframe);
 
-    let readyCount = 0;
-    const totalSlides = slides.length;
-    const iframes: HTMLIFrameElement[] = [];
+        // Load slide HTML and wait for full render (Tailwind CDN, Chart.js, fonts)
+        await new Promise<void>((resolve) => {
+          iframe.addEventListener('load', () => setTimeout(resolve, 3500), { once: true });
+          iframe.srcdoc = sanitize(slides[i].htmlContent || '<html><body><p>Slide vacia</p></body></html>');
+        });
 
-    // After ALL iframes loaded + scripts ran, inject zoom inside each iframe
-    const applyZoomAndPrint = () => {
-      loadingMsg.textContent = 'Ajustando slides al tamaño de pagina...';
+        // Capture the rendered slide
+        const iDoc = iframe.contentDocument;
+        if (iDoc && iDoc.body) {
+          // Measure full content dimensions
+          const fullW = Math.max(iDoc.documentElement.scrollWidth, iDoc.body.scrollWidth, 1280);
+          const fullH = Math.max(iDoc.documentElement.scrollHeight, iDoc.body.scrollHeight, 720);
 
-      iframes.forEach((iframe) => {
-        try {
-          const iDoc = iframe.contentDocument;
-          if (!iDoc || !iDoc.body) return;
+          // Resize iframe to show ALL content
+          iframe.style.width = fullW + 'px';
+          iframe.style.height = fullH + 'px';
+          await new Promise(r => setTimeout(r, 300));
 
-          // Measure real content height inside the iframe
-          const scrollH = Math.max(
-            iDoc.documentElement.scrollHeight,
-            iDoc.body.scrollHeight
-          );
-          const scrollW = Math.max(
-            iDoc.documentElement.scrollWidth,
-            iDoc.body.scrollWidth
-          );
+          const canvas = await html2canvas(iDoc.body, {
+            width: fullW,
+            height: fullH,
+            scale: 2,
+            useCORS: true,
+            allowTaint: true,
+            logging: false,
+            backgroundColor: '#ffffff',
+          });
 
-          // iframe visible area (matches wrapper: 297mm x 210mm)
-          const viewH = iframe.clientHeight || 793;
-          const viewW = iframe.clientWidth || 1122;
+          const imgData = canvas.toDataURL('image/jpeg', 0.92);
 
-          // Only zoom if content overflows
-          if (scrollH > viewH || scrollW > viewW) {
-            const zoomX = viewW / scrollW;
-            const zoomY = viewH / scrollH;
-            const zoom = Math.min(zoomX, zoomY, 1);
+          // Fit image into A4 landscape, centered
+          const imgAspect = fullW / fullH;
+          const pageAspect = PAGE_W / PAGE_H;
+          let drawW: number, drawH: number, drawX: number, drawY: number;
 
-            // Inject zoom CSS directly into the iframe's document
-            const zoomStyle = iDoc.createElement('style');
-            zoomStyle.setAttribute('id', 'pdf-fit-zoom');
-            zoomStyle.textContent = `
-              html {
-                zoom: ${zoom} !important;
-                overflow: hidden !important;
-              }
-            `;
-            iDoc.head.appendChild(zoomStyle);
+          if (imgAspect > pageAspect) {
+            drawW = PAGE_W;
+            drawH = PAGE_W / imgAspect;
+            drawX = 0;
+            drawY = (PAGE_H - drawH) / 2;
+          } else {
+            drawH = PAGE_H;
+            drawW = PAGE_H * imgAspect;
+            drawX = (PAGE_W - drawW) / 2;
+            drawY = 0;
           }
-        } catch (e) {
-          // Cross-origin or other error, skip this iframe
+
+          pdf.addImage(imgData, 'JPEG', drawX, drawY, drawW, drawH);
         }
-      });
 
-      // Wait for zoom reflow, then print
-      loadingMsg.textContent = 'Listo. Abriendo dialogo de impresion...';
-      setTimeout(() => {
-        loadingMsg.style.display = 'none';
-        printWindow.print();
-      }, 1000);
-    };
-
-    // Create one iframe per slide
-    slides.forEach((s, i) => {
-      const wrapper = printDoc.createElement('div');
-      wrapper.className = 'slide-wrapper';
-
-      const label = printDoc.createElement('div');
-      label.className = 'slide-label';
-      label.textContent = `${i + 1} / ${totalSlides}`;
-      wrapper.appendChild(label);
-
-      const iframe = printDoc.createElement('iframe') as HTMLIFrameElement;
-      iframes.push(iframe);
-
-      iframe.addEventListener('load', () => {
-        // Wait for Tailwind CDN + Chart.js + fonts to fully process
-        setTimeout(() => {
-          readyCount++;
-          loadingMsg.textContent = `Cargando slides: ${readyCount} / ${totalSlides}...`;
-          if (readyCount >= totalSlides) {
-            applyZoomAndPrint();
-          }
-        }, 3000);
-      });
-
-      wrapper.appendChild(iframe);
-      printDoc.body.appendChild(wrapper);
-
-      // srcdoc renders the complete slide HTML with all its own scripts
-      iframe.srcdoc = sanitize(s.htmlContent || '<p>Slide vacia</p>');
-    });
-
-    // Safety timeout: if something hangs, print what we have after 25s
-    setTimeout(() => {
-      if (readyCount < totalSlides) {
-        readyCount = totalSlides;
-        applyZoomAndPrint();
+        document.body.removeChild(iframe);
       }
-    }, 25000);
-  };
+
+      pdf.save(`${presentation?.title || 'Presentacion'}.pdf`);
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+    } finally {
+      setDownloading(false);
+    }
+  }, [downloading, slides, presentation]);
 
   // Loading state
   if (loading) {
@@ -318,10 +221,18 @@ export default function SharedViewer() {
           )}
           <button
             onClick={downloadPdf}
-            className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all"
+            disabled={downloading}
+            className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all disabled:opacity-50 disabled:cursor-wait flex items-center gap-1.5"
             title="Descargar como PDF"
           >
-            <Download size={16} />
+            {downloading ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                <span className="text-xs">Generando...</span>
+              </>
+            ) : (
+              <Download size={16} />
+            )}
           </button>
           <button
             onClick={toggleFullscreen}
