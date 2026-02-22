@@ -117,7 +117,7 @@ export default function SharedViewer() {
   ${sharedHead}
   <style>
     @page {
-      size: landscape;
+      size: 297mm 210mm;
       margin: 0;
     }
     * { box-sizing: border-box; }
@@ -130,43 +130,70 @@ export default function SharedViewer() {
       color-adjust: exact !important;
     }
     .slide-page {
-      width: 100vw;
-      height: 100vh;
-      overflow: hidden;
-      page-break-after: always;
+      width: 297mm;
+      height: 210mm;
       position: relative;
       background: #ffffff;
+      overflow: hidden;
+      page-break-after: always;
+      break-after: page;
     }
     .slide-page:last-child {
       page-break-after: auto;
+      break-after: auto;
     }
     .slide-content {
-      width: 100%;
-      height: 100%;
-      padding: 40px;
-      overflow: hidden;
+      width: 297mm;
+      height: 210mm;
+      padding: 10mm;
+      transform-origin: top left;
     }
     .slide-number {
       position: absolute;
-      bottom: 12px;
-      right: 20px;
-      font-size: 10px;
-      color: #9ca3af;
+      bottom: 4mm;
+      right: 6mm;
+      font-size: 8px;
+      color: #d1d5db;
       z-index: 10;
     }
-    /* Hide slide numbers on print if desired */
-    @media print {
-      .slide-number { color: #d1d5db; }
-    }
-    /* Ensure images fit within the page */
     img { max-width: 100%; height: auto; }
+    /* Screen preview before printing */
+    @media screen {
+      body { background: #f3f4f6; padding: 20px; }
+      .slide-page {
+        margin: 0 auto 20px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+        border-radius: 4px;
+      }
+    }
   </style>
 </head>
 <body>
   ${slidePages}
   <script>
+    // Auto-scale each slide's content to fit within the page
     window.onload = function() {
-      setTimeout(function() { window.print(); }, 400);
+      document.querySelectorAll('.slide-page').forEach(function(page) {
+        var content = page.querySelector('.slide-content');
+        if (!content) return;
+        // Temporarily remove overflow hidden to measure true size
+        page.style.overflow = 'visible';
+        var pageW = 297 * 3.7795; // mm to px (approx)
+        var pageH = 210 * 3.7795;
+        var padding = 10 * 3.7795 * 2; // 10mm padding on each side
+        var availW = pageW - padding;
+        var availH = pageH - padding;
+        var contentW = content.scrollWidth;
+        var contentH = content.scrollHeight;
+        var scaleX = contentW > availW ? availW / contentW : 1;
+        var scaleY = contentH > availH ? availH / contentH : 1;
+        var scale = Math.min(scaleX, scaleY, 1);
+        if (scale < 1) {
+          content.style.transform = 'scale(' + scale + ')';
+        }
+        page.style.overflow = 'hidden';
+      });
+      setTimeout(function() { window.print(); }, 600);
     };
   </script>
 </body>
