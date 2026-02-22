@@ -53,7 +53,7 @@ function SortableSlideItem({ slide, index, isActive, onSlideSelect, readOnly }: 
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const htmlContent = (slide as any).htmlContent || (slide as any).html_content || '';
+  const htmlContent = slide.htmlContent || '';
   const previewText = extractTextFromHtml(htmlContent);
   const truncatedText = previewText.length > 120 
     ? previewText.substring(0, 120) + '...' 
@@ -121,7 +121,7 @@ function SortableSlideItem({ slide, index, isActive, onSlideSelect, readOnly }: 
             <div className={`text-xs mt-2 ${
               isActive ? 'text-blue-600' : 'text-gray-400'
             }`}>
-              Actualizada: {new Date((slide as any).updatedAt || (slide as any).updated_at).toLocaleDateString()}
+              Actualizada: {slide.updatedAt instanceof Date ? slide.updatedAt.toLocaleDateString() : new Date(slide.updatedAt).toLocaleDateString()}
             </div>
           </div>
         </div>

@@ -1,17 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
+import { Slide } from '../types';
 import Sidebar from './Sidebar';
 import Toolbar from './Toolbar';
 import SlideViewer from './SlideViewer';
 import HTMLEditor from './HTMLEditor';
 import PresentationMode from './PresentationMode';
 import EditableText from './EditableText';
-
-
-interface Slide {
-  id: string;
-  title: string;
-  htmlContent: string;
-}
 
 interface SlideEditorProps {
   slides: Slide[];
@@ -59,8 +53,6 @@ export default function SlideEditor({ slides, onSlideUpdate, onAddSlide, onDelet
   const handleDeleteSlide = (slideId: string) => {
     if (readOnly || !onDeleteSlide) return;
     
-    console.log('Deleting slide:', slideId, 'Current index:', currentSlideIndex);
-    
     // Si estamos borrando la slide actual y no es la última
     const slideIndex = slides.findIndex(s => s.id === slideId);
     
@@ -88,7 +80,6 @@ export default function SlideEditor({ slides, onSlideUpdate, onAddSlide, onDelet
       const newSlide = slides[newSlideIndex];
       
       if (newSlide && onSlideUpdate) {
-        console.log('Duplicando contenido en nueva slide:', newSlide.id);
         onSlideUpdate(newSlide.id, {
           title: `${pendingDuplication.slideData.title} (copia)`,
           htmlContent: pendingDuplication.slideData.htmlContent
@@ -107,7 +98,6 @@ export default function SlideEditor({ slides, onSlideUpdate, onAddSlide, onDelet
 
   const duplicateSlide = () => {
     if (currentSlide && onAddSlide && !readOnly) {
-      console.log('Iniciando duplicación de slide:', currentSlide);
       // Guardar los datos de la slide a duplicar
       setPendingDuplication({
         slideData: { ...currentSlide },

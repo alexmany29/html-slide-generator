@@ -17,9 +17,6 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<'my' | 'shared' | 'public'>('my');
 
   useEffect(() => {
-    if (user) {
-      console.log('USER ID (auth):', user.id);
-    }
     loadPresentations();
   }, [user]);
 
@@ -32,7 +29,6 @@ export default function Dashboard() {
         presentationService.getPublicPresentations()
       ]);
       
-      console.log('Presentaciones devueltas por getUserPresentations:', myPresentations);
       setPresentations(myPresentations || []);
       setSharedPresentations(shared || []);
       setPublicPresentations(publicOnes || []);

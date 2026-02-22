@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { presentationService, slideService, Presentation, Slide } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { dbSlideToUi, uiSlideToDbUpdates } from '../types';
+import type { Slide as UiSlide } from '../types';
 import SlideEditor from './SlideEditor';
 
 export default function PresentationEditor() {
@@ -15,8 +17,8 @@ export default function PresentationEditor() {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [canEdit, setCanEdit] = useState(false);
 
-  // Auto-save timer
-  const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
+  // Auto-save timer (useRef to avoid stale closure issues)
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -33,19 +35,17 @@ export default function PresentationEditor() {
       if (presentationData) {
         setPresentation(presentationData);
         
-        // Check edit permissions
         const hasEditPermission = await presentationService.canEditPresentation(id);
         setCanEdit(hasEditPermission);
         
         const slidesData = await slideService.getSlides(id);
         setSlides(slidesData || []);
       } else {
-        console.error('Presentation not found');
-        navigate('/dashboard');
+        navigate('/');
       }
     } catch (error) {
       console.error('Error loading presentation:', error);
-      navigate('/dashboard');
+      navigate('/');
     } finally {
       setLoading(false);
     }
@@ -72,18 +72,17 @@ export default function PresentationEditor() {
 
   // Trigger auto-save when presentation changes
   useEffect(() => {
-    if (autoSaveTimer) {
-      clearTimeout(autoSaveTimer);
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
     }
 
     if (presentation) {
-      const timer = setTimeout(autoSave, 10000); // Auto-save after 10 seconds of inactivity
-      setAutoSaveTimer(timer);
+      autoSaveTimerRef.current = setTimeout(autoSave, 10000);
     }
 
     return () => {
-      if (autoSaveTimer) {
-        clearTimeout(autoSaveTimer);
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
       }
     };
   }, [presentation, autoSave]);
@@ -107,9 +106,10 @@ export default function PresentationEditor() {
     }
   }, [presentation, saving]);
 
-  const updateSlide = async (slideId: string, updates: Partial<Slide>) => {
+  const updateSlideFromUi = async (slideId: string, uiUpdates: Partial<UiSlide>) => {
     try {
-      const updatedSlide = await slideService.updateSlide(slideId, updates);
+      const dbUpdates = uiSlideToDbUpdates(uiUpdates);
+      const updatedSlide = await slideService.updateSlide(slideId, dbUpdates);
       setSlides(prev => prev.map(slide => 
         slide.id === slideId ? updatedSlide : slide
       ));
@@ -120,47 +120,23 @@ export default function PresentationEditor() {
   };
 
   const addSlide = async () => {
-    if (!presentation) {
-      console.error('No presentation available for adding slide');
-      return;
-    }
-    
-    console.log('Adding slide to presentation:', presentation.id, 'Current slides:', slides.length);
+    if (!presentation) return;
     
     try {
       const newSlide = await slideService.createSlide(presentation.id, `Slide ${slides.length + 1}`);
-      console.log('New slide created:', newSlide);
-      
-      setSlides(prev => {
-        const updated = [...prev, newSlide];
-        console.log('Updated slides array:', updated);
-        return updated;
-      });
-      
-      console.log('Slide added successfully');
+      setSlides(prev => [...prev, newSlide]);
     } catch (error) {
       console.error('Error adding slide:', error);
-      // Show user-friendly error
       alert('Error al crear la slide. Por favor, inténtalo de nuevo.');
     }
   };
 
   const deleteSlide = async (slideId: string) => {
-    if (slides.length <= 1) {
-      console.log('Cannot delete last slide');
-      return; // Don't delete the last slide
-    }
-    
-    console.log('Deleting slide:', slideId);
+    if (slides.length <= 1) return;
     
     try {
       await slideService.deleteSlide(slideId);
-      setSlides(prev => {
-        const updated = prev.filter(slide => slide.id !== slideId);
-        console.log('Updated slides after deletion:', updated);
-        return updated;
-      });
-      console.log('Slide deleted successfully');
+      setSlides(prev => prev.filter(slide => slide.id !== slideId));
     } catch (error) {
       console.error('Error deleting slide:', error);
       alert('Error al eliminar la slide. Por favor, inténtalo de nuevo.');
@@ -174,37 +150,26 @@ export default function PresentationEditor() {
   };
 
   const reorderSlides = async (reorderedSlides: any[]) => {
-    // Store original slides for rollback
     const originalSlides = [...slides];
     
     try {
-      console.log('Reordering slides:', reorderedSlides.map(s => ({ id: s.id, title: s.title, order: s.slide_order })));
-      
-      // Update local state immediately for better UX
       setSlides(reorderedSlides);
       
-      // Prepare data for backend update - only update the order, not the content
       const slideUpdates = reorderedSlides.map((slide, index) => ({
         id: slide.id,
         slide_order: index
       }));
       
-      console.log('Updating slide orders:', slideUpdates);
-      
-      // Update slide order in database
       await slideService.reorderSlides(slideUpdates);
       
-      // Reload slides from database to ensure consistency
       if (id) {
         const updatedSlides = await slideService.getSlides(id);
-        console.log('Reloaded slides after reorder:', updatedSlides.map(s => ({ id: s.id, title: s.title, order: s.slide_order })));
         setSlides(updatedSlides || []);
       }
       
       setLastSaved(new Date());
     } catch (error) {
       console.error('Error reordering slides:', error);
-      // Revert to original state on error
       setSlides(originalSlides);
       alert('Error al reordenar las slides. Se ha revertido el cambio.');
     }
@@ -237,14 +202,8 @@ export default function PresentationEditor() {
     );
   }
 
-  // Convert our Slide type to the legacy format expected by SlideEditor
-  const legacySlides = slides.map(slide => ({
-    id: slide.id,
-    title: slide.title,
-    htmlContent: slide.html_content || ''
-  }));
-  
-  console.log('Rendering with slides:', legacySlides.length, legacySlides);
+  // Convert DB slides to UI format for SlideEditor
+  const uiSlides = slides.map(dbSlideToUi);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -326,16 +285,11 @@ export default function PresentationEditor() {
       </header>
 
       {/* Slide Editor */}
-      {legacySlides.length > 0 ? (
+      {uiSlides.length > 0 ? (
         <SlideEditor
-          slides={legacySlides}
-          onSlideUpdate={canEdit ? (id, updates) => {
-            console.log('Updating slide:', id, updates);
-            // Convert back to our format
-            updateSlide(id, {
-              title: updates.title,
-              html_content: updates.htmlContent
-            });
+          slides={uiSlides}
+          onSlideUpdate={canEdit ? (slideId, updates) => {
+            updateSlideFromUi(slideId, updates);
           } : undefined}
           onAddSlide={canEdit ? addSlide : undefined}
           onDeleteSlide={canEdit ? deleteSlide : undefined}

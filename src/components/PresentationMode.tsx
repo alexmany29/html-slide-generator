@@ -156,23 +156,6 @@ export default function PresentationMode({ slides, currentSlideIndex, onClose, o
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleClose, goToPrevious, goToNext, toggleFullscreen]);
 
-  // Detectar cambios de pantalla completa
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-    document.addEventListener('msfullscreenchange', handleFullscreenChange);
-    
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('msfullscreenchange', handleFullscreenChange);
-    };
-  }, []);
-
   // Validaciones de seguridad
   if (!slides || slides.length === 0) {
     return (

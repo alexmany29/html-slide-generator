@@ -67,7 +67,10 @@ export default function HTMLEditor({ content, onChange, onClose }: HTMLEditorPro
 
   useEffect(() => {
     if (isPreview && previewRef.current) {
-      const fullHtml = `
+      // If content is already a full HTML document, use it directly
+      const isFullDocument = htmlContent.trim().toLowerCase().startsWith('<!doctype') || 
+                             htmlContent.trim().toLowerCase().startsWith('<html');
+      const finalHtml = isFullDocument ? htmlContent : `
         <!DOCTYPE html>
         <html lang="en">
         <head>
@@ -80,7 +83,7 @@ export default function HTMLEditor({ content, onChange, onClose }: HTMLEditorPro
         </body>
         </html>
       `;
-      previewRef.current.srcdoc = fullHtml;
+      previewRef.current.srcdoc = finalHtml;
     }
   }, [isPreview, htmlContent]);
 

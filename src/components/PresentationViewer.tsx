@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { presentationService, slideService, Presentation, Slide } from '../lib/supabase';
+import { dbSlideToUi } from '../types';
 import PresentationMode from './PresentationMode';
 
 export default function PresentationViewer() {
@@ -22,24 +23,7 @@ export default function PresentationViewer() {
     try {
       setLoading(true);
       
-      // Try to get from user's presentations first
-      let presentationData = await presentationService.getUserPresentations()
-        .then(presentations => presentations.find(p => p.id === id))
-        .catch(() => null);
-
-      // If not found, try shared presentations
-      if (!presentationData) {
-        presentationData = await presentationService.getSharedPresentations()
-          .then(presentations => presentations.find(p => p.id === id))
-          .catch(() => null);
-      }
-
-      // If still not found, try public presentations
-      if (!presentationData) {
-        presentationData = await presentationService.getPublicPresentations()
-          .then(presentations => presentations.find(p => p.id === id))
-          .catch(() => null);
-      }
+      const presentationData = await presentationService.getPresentationById(id);
 
       if (!presentationData) {
         navigate('/');
@@ -91,19 +75,6 @@ export default function PresentationViewer() {
     );
   }
 
-  // Show loading if slides are still being fetched
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Cargando presentación...</h2>
-          <p className="text-gray-600">Por favor espera un momento</p>
-        </div>
-      </div>
-    );
-  }
-
   // Show empty state only if we're sure there are no slides after loading
   if (slides.length === 0) {
     return (
@@ -127,14 +98,7 @@ export default function PresentationViewer() {
     );
   }
 
-  // Convert our Slide type to the format expected by PresentationMode
-  const formattedSlides = slides.map(slide => ({
-    id: slide.id,
-    title: slide.title,
-    htmlContent: slide.html_content,
-    createdAt: new Date(slide.created_at),
-    updatedAt: new Date(slide.updated_at)
-  }));
+  const formattedSlides = slides.map(dbSlideToUi);
 
   return (
     <PresentationMode

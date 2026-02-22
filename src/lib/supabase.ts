@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import type { DbSlide } from '../types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -9,7 +10,9 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Types for our database
+// Re-export DbSlide as Slide for backward compat in service layer
+export type Slide = DbSlide;
+
 export interface Presentation {
   id: string;
   user_id: string;
@@ -20,18 +23,7 @@ export interface Presentation {
   is_public: boolean;
 }
 
-export interface Slide {
-  id: string;
-  presentation_id: string;
-  title: string;
-  html_content: string;
-  slide_order: number;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface PresentationShare {
-  id: string;
   presentation_id: string;
   shared_with_user_id: string;
   permission_level: 'view' | 'edit';
@@ -284,24 +276,12 @@ export const slideService = {
     if (error) throw error;
   },
 
-  // Reorder slides
+  // Reorder slides using batch RPC
   async reorderSlides(slides: { id: string; slide_order: number }[]) {
-    try {
-      // Execute updates sequentially to avoid conflicts
-      for (const slide of slides) {
-        const { error } = await supabase
-          .from('slides')
-          .update({ slide_order: slide.slide_order })
-          .eq('id', slide.id);
-        
-        if (error) {
-          console.error('Error updating slide order:', error);
-          throw error;
-        }
-      }
-    } catch (error) {
-      console.error('Error in reorderSlides:', error);
-      throw error;
-    }
+    const { error } = await supabase.rpc('batch_reorder_slides', {
+      slide_ids: slides.map(s => s.id),
+      slide_orders: slides.map(s => s.slide_order),
+    });
+    if (error) throw error;
   }
 };
