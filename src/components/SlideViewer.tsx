@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from 'react';
+import { FileText, Pencil, AlertTriangle } from 'lucide-react';
 import { Slide } from '../types';
 
 interface SlideViewerProps {
@@ -109,12 +110,12 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
                     if (script.integrity) newScript.integrity = script.integrity;
                     
                     newScript.onload = () => {
-                      console.log(`✓ Script externo cargado: ${script.src}`);
+                      console.log(`Script externo cargado: ${script.src}`);
                       resolve(true);
                     };
                     
                     newScript.onerror = (error) => {
-                      console.warn(`⚠️ Error cargando script: ${script.src}`, error);
+                      console.warn(`Error cargando script: ${script.src}`, error);
                       resolve(false); // Continuar aunque falle
                     };
                     
@@ -153,7 +154,7 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
                     iframeDoc.body.appendChild(newScript);
                   }
                   
-                  console.log('✓ Script inline ejecutado');
+                  console.log('Script inline ejecutado');
                 } catch (error) {
                   console.warn('Error procesando script inline:', error);
                 }
@@ -360,7 +361,7 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
       
       if (scripts.length === 0) return;
       
-      console.log('🔄 Re-ejecutando scripts después de cambios...');
+      console.log('Re-ejecutando scripts despues de cambios...');
       
       // Separar scripts externos e inline
       const externalScripts = scripts.filter(s => s.src);
@@ -371,7 +372,7 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
         try {
           // Solo re-ejecutar si el script ya estaba cargado
           if (script.src && !script.src.includes('tailwindcss')) {
-            console.log(`🔄 Re-cargando script: ${script.src}`);
+            console.log(`Re-cargando script: ${script.src}`);
             
             const newScript = iframeDoc.createElement('script');
             newScript.src = script.src;
@@ -385,11 +386,11 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
             
             await new Promise((resolve) => {
               newScript.onload = () => {
-                console.log(`✅ Script re-cargado: ${script.src}`);
+                console.log(`Script re-cargado: ${script.src}`);
                 resolve(true);
               };
               newScript.onerror = () => {
-                console.warn(`⚠️ Error re-cargando: ${script.src}`);
+                console.warn(`Error re-cargando: ${script.src}`);
                 resolve(false);
               };
               
@@ -424,7 +425,7 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
             script.parentNode.replaceChild(newScript, script);
           }
           
-          console.log('✅ Script inline re-ejecutado');
+          console.log('Script inline re-ejecutado');
         } catch (error) {
           console.warn('Error re-ejecutando script inline:', error);
         }
@@ -571,7 +572,9 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
     return (
       <div className="w-full h-full relative bg-gray-100 flex items-center justify-center">
         <div className="text-center p-8">
-          <div className="text-6xl mb-4">📄</div>
+          <div className="w-16 h-16 bg-gray-200 rounded-2xl flex items-center justify-center mx-auto mb-5">
+            <FileText size={28} className="text-gray-400" />
+          </div>
           <h3 className="text-lg font-medium text-gray-700 mb-2">Slide vacío</h3>
           <p className="text-sm text-gray-500">
             Este slide no tiene contenido HTML.
@@ -588,8 +591,9 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
       
       {/* Indicador de modo de edición */}
       {isVisualEditMode && (
-        <div className="absolute top-4 left-4 z-20 bg-blue-500 text-white px-3 py-1 rounded-lg text-sm font-medium">
-          📝 Modo Edición Visual Activo
+        <div className="absolute top-4 left-4 z-20 bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center space-x-1.5">
+          <Pencil size={14} />
+          <span>Modo Edición Visual Activo</span>
         </div>
       )}
       {isLoading && (
@@ -605,7 +609,9 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
       {hasError && (
         <div className="absolute inset-0 bg-red-50 flex items-center justify-center z-10">
           <div className="text-center p-6 max-w-md">
-            <div className="text-4xl mb-4">⚠️</div>
+            <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle size={24} className="text-red-500" />
+            </div>
             <h3 className="text-lg font-medium text-red-800 mb-2">Error al cargar el contenido</h3>
             <p className="text-sm text-red-600 mb-4">{errorMessage}</p>
             <button

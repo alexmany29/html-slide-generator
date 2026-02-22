@@ -4,6 +4,7 @@ import { presentationService, slideService, Presentation, Slide } from '../lib/s
 import { useAuth } from '../contexts/AuthContext';
 import { dbSlideToUi, uiSlideToDbUpdates } from '../types';
 import type { Slide as UiSlide } from '../types';
+import { ArrowLeft, Save, Eye, FileText, Plus } from 'lucide-react';
 import SlideEditor from './SlideEditor';
 
 export default function PresentationEditor() {
@@ -216,7 +217,7 @@ export default function PresentationEditor() {
                 onClick={() => navigate('/')}
                 className="text-gray-500 hover:text-gray-700 transition-colors"
               >
-                ← Volver
+                <ArrowLeft size={18} className="mr-1.5" /> Volver
               </button>
               <div>
                 {canEdit ? (
@@ -259,7 +260,7 @@ export default function PresentationEditor() {
                       </>
                     ) : (
                       <>
-                        <span>💾</span>
+                        <Save size={16} />
                         <span>Guardar</span>
                       </>
                     )}
@@ -272,8 +273,9 @@ export default function PresentationEditor() {
                 </>
               )}
               {!canEdit && (
-                <span className="text-sm text-amber-600 bg-amber-50 px-3 py-1 rounded-full">
-                  👁️ Solo lectura
+                <span className="flex items-center space-x-1.5 text-sm text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg">
+                  <Eye size={14} />
+                  <span>Solo lectura</span>
                 </span>
               )}
               <span className="text-sm text-gray-600">
@@ -299,15 +301,18 @@ export default function PresentationEditor() {
       ) : (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <div className="text-6xl mb-4">📄</div>
-            <h3 className="text-lg font-medium text-gray-700 mb-2">No hay slides</h3>
+            <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
+              <FileText size={28} className="text-gray-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-700 mb-2">No hay slides</h3>
             <p className="text-sm text-gray-500 mb-4">Crea tu primera slide para comenzar</p>
             {canEdit && (
               <button
                 onClick={addSlide}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-all flex items-center space-x-2 mx-auto shadow-sm hover:shadow-md"
               >
-                Crear primera slide
+                <Plus size={18} />
+                <span>Crear primera slide</span>
               </button>
             )}
           </div>

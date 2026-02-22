@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { X } from 'lucide-react';
 
 interface CreatePresentationModalProps {
   onClose: () => void;
@@ -33,9 +34,9 @@ export default function CreatePresentationModal({ onClose, onCreate }: CreatePre
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
           >
-            ✕
+            <X size={18} />
           </button>
         </div>
 

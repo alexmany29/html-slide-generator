@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { presentationService, slideService, Presentation, Slide } from '../lib/supabase';
 import { dbSlideToUi } from '../types';
+import { BarChart3, FileText } from 'lucide-react';
 import PresentationMode from './PresentationMode';
 
 export default function PresentationViewer() {
@@ -57,7 +58,9 @@ export default function PresentationViewer() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-6xl mb-4">📊</div>
+          <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
+            <BarChart3 size={28} className="text-gray-400" />
+          </div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">
             Presentación no encontrada
           </h2>
@@ -80,7 +83,9 @@ export default function PresentationViewer() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-6xl mb-4">📊</div>
+          <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
+            <FileText size={28} className="text-gray-400" />
+          </div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">
             Esta presentación no tiene slides
           </h2>

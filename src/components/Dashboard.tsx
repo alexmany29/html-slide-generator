@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { presentationService, Presentation } from '../lib/supabase';
+import { Layers, Plus, FolderOpen, Users, Globe, LogOut } from 'lucide-react';
 import PresentationCard from './PresentationCard';
 import CreatePresentationModal from './CreatePresentationModal';
 import ShareModal from './ShareModal';
@@ -109,23 +110,27 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-gray-900">
-                ⚡ SlideForge
+            <div className="flex items-center space-x-2.5">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
+                <Layers size={18} className="text-white" />
+              </div>
+              <h1 className="text-xl font-bold text-gray-900 tracking-tight">
+                SlideForge
               </h1>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">
-                Hola, {user?.email}
+              <span className="text-sm text-gray-500">
+                {user?.email}
               </span>
               <button
                 onClick={signOut}
-                className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                className="flex items-center space-x-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-100"
               >
-                Cerrar sesión
+                <LogOut size={15} />
+                <span>Salir</span>
               </button>
             </div>
           </div>
@@ -135,40 +140,50 @@ export default function Dashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Tabs */}
         <div className="mb-8">
-          <div className="border-b border-gray-200">
-            <nav className="-mb-px flex space-x-8">
-              <button
-                onClick={() => setActiveTab('my')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === 'my'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                Mis Presentaciones ({presentations.length})
-              </button>
-              <button
-                onClick={() => setActiveTab('shared')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === 'shared'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                Compartidas Conmigo ({sharedPresentations.length})
-              </button>
-              <button
-                onClick={() => setActiveTab('public')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === 'public'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                Públicas ({publicPresentations.length})
-              </button>
-            </nav>
-          </div>
+          <nav className="flex space-x-1 bg-gray-100 p-1 rounded-xl w-fit">
+            <button
+              onClick={() => setActiveTab('my')}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'my'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <FolderOpen size={16} />
+              <span>Mis Presentaciones</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                activeTab === 'my' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'
+              }`}>{presentations.length}</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('shared')}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'shared'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Users size={16} />
+              <span>Compartidas</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                activeTab === 'shared' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'
+              }`}>{sharedPresentations.length}</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('public')}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'public'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Globe size={16} />
+              <span>Públicas</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                activeTab === 'public' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'
+              }`}>{publicPresentations.length}</span>
+            </button>
+          </nav>
         </div>
 
         {/* Create button */}
@@ -176,9 +191,9 @@ export default function Dashboard() {
           <div className="mb-8">
             <button
               onClick={() => setShowCreateModal(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center space-x-2"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-all flex items-center space-x-2 shadow-sm hover:shadow-md"
             >
-              <span>➕</span>
+              <Plus size={18} />
               <span>Nueva Presentación</span>
             </button>
           </div>
@@ -199,14 +214,18 @@ export default function Dashboard() {
 
         {/* Empty State */}
         {getCurrentPresentations().length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">📊</div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
+          <div className="text-center py-16">
+            <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
+              {activeTab === 'my' && <FolderOpen size={28} className="text-gray-400" />}
+              {activeTab === 'shared' && <Users size={28} className="text-gray-400" />}
+              {activeTab === 'public' && <Globe size={28} className="text-gray-400" />}
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
               {activeTab === 'my' && 'No tienes presentaciones aún'}
               {activeTab === 'shared' && 'No tienes presentaciones compartidas'}
               {activeTab === 'public' && 'No hay presentaciones públicas'}
             </h3>
-            <p className="text-gray-500 mb-6">
+            <p className="text-gray-500 mb-6 max-w-sm mx-auto">
               {activeTab === 'my' && 'Crea tu primera presentación para empezar'}
               {activeTab === 'shared' && 'Las presentaciones que otros compartan contigo aparecerán aquí'}
               {activeTab === 'public' && 'Las presentaciones públicas aparecerán aquí'}
@@ -214,9 +233,10 @@ export default function Dashboard() {
             {activeTab === 'my' && (
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-all flex items-center space-x-2 mx-auto shadow-sm hover:shadow-md"
               >
-                Crear Primera Presentación
+                <Plus size={18} />
+                <span>Crear Primera Presentación</span>
               </button>
             )}
           </div>

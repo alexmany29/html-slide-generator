@@ -1,6 +1,7 @@
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { supabase } from '../lib/supabase';
+import { Layers } from 'lucide-react';
 
 export default function AuthComponent() {
   return (
@@ -8,8 +9,11 @@ export default function AuthComponent() {
       <div className="max-w-md w-full">
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="text-center mb-8">
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center mx-auto mb-4">
+              <Layers size={24} className="text-white" />
+            </div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              ⚡ SlideForge
+              SlideForge
             </h1>
             <p className="text-gray-600">
               Crea presentaciones interactivas con HTML, CSS y JavaScript

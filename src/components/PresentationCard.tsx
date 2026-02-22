@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Presentation, presentationService } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
+import { Trash2, Calendar, Eye, Pencil, Share2 } from 'lucide-react';
 
 interface PresentationCardProps {
   presentation: Presentation;
@@ -69,17 +70,17 @@ export default function PresentationCard({ presentation, onDelete, onShare, canE
           {canEdit && onDelete && (
             <button
               onClick={() => onDelete(presentation.id)}
-              className="text-gray-400 hover:text-red-500 transition-colors ml-2"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all ml-2"
               title="Eliminar presentación"
             >
-              🗑️
+              <Trash2 size={16} />
             </button>
           )}
         </div>
 
         <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
           <div className="flex items-center space-x-4">
-            <span>📅 {formatDate(presentation.updated_at)}</span>
+            <span className="flex items-center space-x-1.5"><Calendar size={14} /><span>{formatDate(presentation.updated_at)}</span></span>
             {presentation.is_public && (
               <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs">
                 Público
@@ -94,7 +95,7 @@ export default function PresentationCard({ presentation, onDelete, onShare, canE
             onClick={handleView}
             className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors text-sm"
           >
-            👁️ Ver
+            <Eye size={15} className="mr-1.5" /> Ver
           </button>
           {canEditPresentation && (
             <>
@@ -102,7 +103,7 @@ export default function PresentationCard({ presentation, onDelete, onShare, canE
                 onClick={handleEdit}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm"
               >
-                ✏️ Editar
+                <Pencil size={15} className="mr-1.5" /> Editar
               </button>
               {onShare && (
                 <button
@@ -110,7 +111,7 @@ export default function PresentationCard({ presentation, onDelete, onShare, canE
                   className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm"
                   title="Compartir presentación"
                 >
-                  🚀
+                  <Share2 size={16} />
                 </button>
               )}
             </>

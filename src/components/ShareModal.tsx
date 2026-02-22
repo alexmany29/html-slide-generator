@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Share2, Copy, Mail, Globe, Lock } from 'lucide-react';
+import { X, Share2, Copy, Mail, Globe, Lock, Eye, Pencil } from 'lucide-react';
 import { presentationService, supabase } from '../lib/supabase';
 
 interface ShareModalProps {
@@ -197,7 +197,7 @@ export default function ShareModal({
                     onChange={(e) => setPermissionLevel(e.target.value as 'view' | 'edit')}
                     className="text-blue-600 focus:ring-blue-500"
                   />
-                  <span className="text-sm text-gray-700">👁️ Solo ver</span>
+                  <span className="flex items-center space-x-1 text-sm text-gray-700"><Eye size={14} /><span>Solo ver</span></span>
                 </label>
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
@@ -208,7 +208,7 @@ export default function ShareModal({
                     onChange={(e) => setPermissionLevel(e.target.value as 'view' | 'edit')}
                     className="text-blue-600 focus:ring-blue-500"
                   />
-                  <span className="text-sm text-gray-700">✏️ Puede editar</span>
+                  <span className="flex items-center space-x-1 text-sm text-gray-700"><Pencil size={14} /><span>Puede editar</span></span>
                 </label>
               </div>
             </div>
