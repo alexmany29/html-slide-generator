@@ -5,8 +5,9 @@ import AuthComponent from './components/Auth';
 import Dashboard from './components/Dashboard';
 import PresentationEditor from './components/PresentationEditor';
 import PresentationViewer from './components/PresentationViewer';
+import SharedViewer from './components/SharedViewer';
 
-function AppContent() {
+function AuthenticatedRoutes() {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -25,12 +26,23 @@ function AppContent() {
   }
 
   return (
+    <Routes>
+      <Route path="/" element={<Dashboard />} />
+      <Route path="/presentation/:id" element={<PresentationEditor />} />
+      <Route path="/presentation/:id/view" element={<PresentationViewer />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+function AppContent() {
+  return (
     <Router>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/presentation/:id" element={<PresentationEditor />} />
-        <Route path="/presentation/:id/view" element={<PresentationViewer />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Public route - no auth required */}
+        <Route path="/s/:token" element={<SharedViewer />} />
+        {/* All other routes require auth */}
+        <Route path="/*" element={<AuthenticatedRoutes />} />
       </Routes>
     </Router>
   );

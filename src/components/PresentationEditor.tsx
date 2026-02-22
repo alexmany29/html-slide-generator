@@ -4,8 +4,9 @@ import { presentationService, slideService, Presentation, Slide } from '../lib/s
 import { useAuth } from '../contexts/AuthContext';
 import { dbSlideToUi, uiSlideToDbUpdates } from '../types';
 import type { Slide as UiSlide } from '../types';
-import { ArrowLeft, Save, Eye, FileText, Plus } from 'lucide-react';
+import { ArrowLeft, Save, Eye, FileText, Plus, Link2 } from 'lucide-react';
 import SlideEditor from './SlideEditor';
+import ShareLinkModal from './ShareLinkModal';
 
 export default function PresentationEditor() {
   const { id } = useParams<{ id: string }>();
@@ -17,9 +18,9 @@ export default function PresentationEditor() {
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [canEdit, setCanEdit] = useState(false);
-
-  // Auto-save timer (useRef to avoid stale closure issues)
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showShareLinkModal, setShowShareLinkModal] = useState(false);
+  const [currentSlide, setCurrentSlide] = useState<{id: string; title: string} | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -270,6 +271,13 @@ export default function PresentationEditor() {
                       Guardado {lastSaved.toLocaleTimeString()}
                     </span>
                   )}
+                  <button
+                    onClick={() => setShowShareLinkModal(true)}
+                    className="flex items-center space-x-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-all"
+                  >
+                    <Link2 size={15} />
+                    <span>Compartir enlace</span>
+                  </button>
                 </>
               )}
               {!canEdit && (
@@ -296,6 +304,7 @@ export default function PresentationEditor() {
           onAddSlide={canEdit ? addSlide : undefined}
           onDeleteSlide={canEdit ? deleteSlide : undefined}
           onReorderSlides={canEdit ? reorderSlides : undefined}
+          onCurrentSlideChange={(slide) => setCurrentSlide({ id: slide.id, title: slide.title })}
           readOnly={!canEdit}
         />
       ) : (
@@ -317,6 +326,17 @@ export default function PresentationEditor() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Share Link Modal */}
+      {showShareLinkModal && presentation && (
+        <ShareLinkModal
+          presentationId={presentation.id}
+          presentationTitle={presentation.title}
+          currentSlideId={currentSlide?.id}
+          currentSlideTitle={currentSlide?.title}
+          onClose={() => setShowShareLinkModal(false)}
+        />
       )}
     </div>
   );

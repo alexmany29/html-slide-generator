@@ -214,6 +214,142 @@ export const presentationService = {
   }
 };
 
+// Share link types and service
+export interface ShareLink {
+  id: string;
+  token: string;
+  presentation_id: string;
+  slide_id: string | null;
+  created_by: string;
+  title: string | null;
+  is_active: boolean;
+  password: string | null;
+  expires_at: string | null;
+  view_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+function generateToken(length = 12): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  let token = '';
+  const array = new Uint8Array(length);
+  crypto.getRandomValues(array);
+  for (let i = 0; i < length; i++) {
+    token += chars[array[i] % chars.length];
+  }
+  return token;
+}
+
+export const shareLinkService = {
+  // Create a share link for a presentation or specific slide
+  async createShareLink(presentationId: string, slideId?: string, title?: string, expiresAt?: string): Promise<ShareLink> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    const token = generateToken(16);
+
+    const { data, error } = await supabase
+      .from('share_links')
+      .insert({
+        token,
+        presentation_id: presentationId,
+        slide_id: slideId || null,
+        created_by: user.id,
+        title: title || null,
+        expires_at: expiresAt || null,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as ShareLink;
+  },
+
+  // Get all share links for a presentation
+  async getShareLinks(presentationId: string): Promise<ShareLink[]> {
+    const { data, error } = await supabase
+      .from('share_links')
+      .select('*')
+      .eq('presentation_id', presentationId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Toggle active state
+  async toggleShareLink(id: string, isActive: boolean): Promise<void> {
+    const { error } = await supabase
+      .from('share_links')
+      .update({ is_active: isActive, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  // Delete a share link
+  async deleteShareLink(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('share_links')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  // PUBLIC: Resolve a share link by token (no auth required)
+  async resolveShareLink(token: string): Promise<{
+    shareLink: ShareLink;
+    presentation: Presentation;
+    slides: Slide[];
+  } | null> {
+    // Get the share link
+    const { data: link, error: linkError } = await supabase
+      .from('share_links')
+      .select('*')
+      .eq('token', token)
+      .eq('is_active', true)
+      .single();
+
+    if (linkError || !link) return null;
+
+    // Check expiration
+    if (link.expires_at && new Date(link.expires_at) < new Date()) return null;
+
+    // Get presentation
+    const { data: presentation, error: presError } = await supabase
+      .from('presentations')
+      .select('*')
+      .eq('id', link.presentation_id)
+      .single();
+
+    if (presError || !presentation) return null;
+
+    // Get slides
+    let slidesQuery = supabase
+      .from('slides')
+      .select('*')
+      .eq('presentation_id', link.presentation_id)
+      .order('slide_order', { ascending: true });
+
+    // If specific slide, filter to just that one
+    if (link.slide_id) {
+      slidesQuery = slidesQuery.eq('id', link.slide_id);
+    }
+
+    const { data: slides, error: slidesError } = await slidesQuery;
+    if (slidesError) return null;
+
+    // Increment view count (fire and forget)
+    supabase.rpc('increment_share_link_views', { link_token: token }).then(() => {});
+
+    return {
+      shareLink: link as ShareLink,
+      presentation: presentation as Presentation,
+      slides: (slides || []) as Slide[],
+    };
+  },
+};
+
 export const slideService = {
   // Get slides for a presentation
   async getSlides(presentationId: string) {

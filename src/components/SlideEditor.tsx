@@ -13,10 +13,11 @@ interface SlideEditorProps {
   onAddSlide?: () => void;
   onDeleteSlide?: (id: string) => void;
   onReorderSlides?: (slides: Slide[]) => void;
+  onCurrentSlideChange?: (slide: Slide) => void;
   readOnly?: boolean;
 }
 
-export default function SlideEditor({ slides, onSlideUpdate, onAddSlide, onDeleteSlide, onReorderSlides, readOnly = false }: SlideEditorProps) {
+export default function SlideEditor({ slides, onSlideUpdate, onAddSlide, onDeleteSlide, onReorderSlides, onCurrentSlideChange, readOnly = false }: SlideEditorProps) {
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [showHTMLEditor, setShowHTMLEditor] = useState(false);
   const [showPresentation, setShowPresentation] = useState(false);
@@ -32,6 +33,13 @@ export default function SlideEditor({ slides, onSlideUpdate, onAddSlide, onDelet
   if (safeCurrentIndex !== currentSlideIndex && slides.length > 0) {
     setCurrentSlideIndex(safeCurrentIndex);
   }
+
+  // Notify parent of current slide changes
+  useEffect(() => {
+    if (currentSlide && onCurrentSlideChange) {
+      onCurrentSlideChange(currentSlide);
+    }
+  }, [currentSlide?.id]);
 
   const handleSlideUpdate = (updates: Partial<Slide>) => {
     if (currentSlide && onSlideUpdate && !readOnly) {
