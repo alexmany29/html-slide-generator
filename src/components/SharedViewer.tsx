@@ -77,134 +77,179 @@ export default function SharedViewer() {
     }
   };
 
-  // Capture a single slide by rendering it in a hidden iframe, then running
-  // html2canvas INSIDE the iframe (same document context = all Tailwind/Chart.js
-  // styles are available). Result sent back via postMessage.
-  const captureSlide = useCallback((html: string): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const iframe = document.createElement('iframe');
-      iframe.style.cssText =
-        'position:fixed;left:0;top:0;width:1280px;height:960px;border:none;opacity:0;pointer-events:none;z-index:-1;';
-      document.body.appendChild(iframe);
+  // ── PDF: extract structured text blocks from HTML ──
+  const extractBlocks = useCallback((el: Element, indent = 0): Array<{type: string; text: string; level: number; indent: number}> => {
+    const blocks: Array<{type: string; text: string; level: number; indent: number}> = [];
 
-      let settled = false;
-      const cleanup = () => {
-        window.removeEventListener('message', onMsg);
-        if (iframe.parentNode) document.body.removeChild(iframe);
-      };
+    for (const child of Array.from(el.children)) {
+      const tag = child.tagName.toLowerCase();
+      const text = child.textContent?.trim();
 
-      const onMsg = (e: MessageEvent) => {
-        if (e.data?.type === 'pdf-slide-capture' && e.source === iframe.contentWindow) {
-          settled = true;
-          cleanup();
-          resolve(e.data.dataUrl || '');
-        }
-      };
-      window.addEventListener('message', onMsg);
+      if (!text || ['script','style','svg','canvas','noscript','link','meta','img','video','audio','iframe'].includes(tag)) continue;
 
-      iframe.addEventListener('load', () => {
-        // Wait for Tailwind CDN + Chart.js + Google Fonts to fully process
-        setTimeout(() => {
-          try {
-            const iDoc = iframe.contentDocument;
-            if (!iDoc) { cleanup(); reject(new Error('No document')); return; }
-
-            // Measure full content, then resize iframe before capture
-            const fullW = Math.max(iDoc.documentElement.scrollWidth, iDoc.body.scrollWidth, 1280);
-            const fullH = Math.max(iDoc.documentElement.scrollHeight, iDoc.body.scrollHeight, 960);
-            iframe.style.width = fullW + 'px';
-            iframe.style.height = fullH + 'px';
-
-            // Inject html2canvas from CDN and run capture inside the iframe
-            const script = iDoc.createElement('script');
-            script.textContent = `
-              (function(){
-                var s=document.createElement('script');
-                s.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-                s.onload=function(){
-                  var w=Math.max(document.documentElement.scrollWidth,document.body.scrollWidth,1280);
-                  var h=Math.max(document.documentElement.scrollHeight,document.body.scrollHeight,960);
-                  html2canvas(document.body,{
-                    width:w,height:h,scale:2,
-                    useCORS:true,allowTaint:true,
-                    backgroundColor:'#ffffff',logging:false
-                  }).then(function(c){
-                    window.parent.postMessage({type:'pdf-slide-capture',dataUrl:c.toDataURL('image/jpeg',0.92)},'*');
-                  }).catch(function(){
-                    window.parent.postMessage({type:'pdf-slide-capture',dataUrl:''},'*');
-                  });
-                };
-                s.onerror=function(){
-                  window.parent.postMessage({type:'pdf-slide-capture',dataUrl:''},'*');
-                };
-                document.head.appendChild(s);
-              })();
-            `;
-            iDoc.body.appendChild(script);
-          } catch (e) {
-            cleanup();
-            reject(e);
+      if (['h1','h2','h3','h4','h5','h6'].includes(tag)) {
+        blocks.push({ type: 'heading', text, level: parseInt(tag[1]), indent });
+      } else if (['p','blockquote','figcaption','label','dt','dd','address','pre','code'].includes(tag)) {
+        blocks.push({ type: 'text', text, level: 0, indent });
+      } else if (tag === 'li') {
+        blocks.push({ type: 'listItem', text, level: 0, indent });
+      } else if (tag === 'ul' || tag === 'ol') {
+        for (const li of Array.from(child.children)) {
+          if (li.tagName.toLowerCase() === 'li') {
+            const liText = li.textContent?.trim();
+            if (liText) blocks.push({ type: 'listItem', text: liText, level: 0, indent: indent + 4 });
           }
-        }, 3500);
-      }, { once: true });
-
-      iframe.srcdoc = html;
-
-      // Safety timeout — 20s per slide max
-      setTimeout(() => {
-        if (!settled) { cleanup(); reject(new Error('Timeout')); }
-      }, 20000);
-    });
+        }
+      } else if (tag === 'hr') {
+        blocks.push({ type: 'divider', text: '', level: 0, indent: 0 });
+      } else if (tag === 'a') {
+        const href = (child as HTMLAnchorElement).getAttribute('href') || '';
+        const linkText = href && href !== text ? `${text} (${href})` : text;
+        blocks.push({ type: 'link', text: linkText, level: 0, indent });
+      } else if (tag === 'table') {
+        // Extract table rows as text
+        child.querySelectorAll('tr').forEach(tr => {
+          const cells = Array.from(tr.querySelectorAll('td, th')).map(c => c.textContent?.trim()).filter(Boolean);
+          if (cells.length > 0) blocks.push({ type: 'text', text: cells.join('  |  '), level: 0, indent });
+        });
+      } else {
+        // Container elements — recurse
+        if (child.children.length > 0) {
+          blocks.push(...extractBlocks(child, indent));
+        } else if (text) {
+          blocks.push({ type: 'text', text, level: 0, indent });
+        }
+      }
+    }
+    return blocks;
   }, []);
 
+  // ── PDF generation: pure text extraction + jsPDF ──
   const downloadPdf = useCallback(async () => {
     if (downloading || slides.length === 0) return;
     setDownloading(true);
 
-    const sanitize = (html: string): string =>
-      html
-        .replace(/\s*contenteditable="[^"]*"/gi, '')
-        .replace(/\s*data-visual-edit(="[^"]*")?/gi, '');
-
     try {
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      const PAGE_W = 297;
-      const PAGE_H = 210;
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const PW = 210, PH = 297, M = 15, CW = PW - M * 2;
+      const parser = new DOMParser();
 
       for (let i = 0; i < slides.length; i++) {
         if (i > 0) pdf.addPage();
 
-        const dataUrl = await captureSlide(
-          sanitize(slides[i].htmlContent || '<html><body><p>Slide</p></body></html>')
-        );
+        const cleanHtml = (slides[i].htmlContent || '')
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
 
-        if (dataUrl) {
-          // Decode image dimensions to calculate aspect ratio
-          const img = new Image();
-          await new Promise<void>((res, rej) => {
-            img.onload = () => res();
-            img.onerror = () => rej(new Error('img load fail'));
-            img.src = dataUrl;
-          });
+        const doc = parser.parseFromString(cleanHtml, 'text/html');
+        const title = doc.querySelector('title')?.textContent?.trim() || `Slide ${i + 1}`;
 
-          const imgAspect = img.width / img.height;
-          const pageAspect = PAGE_W / PAGE_H;
-          let drawW: number, drawH: number, drawX: number, drawY: number;
+        let y = M;
 
-          if (imgAspect > pageAspect) {
-            drawW = PAGE_W;
-            drawH = PAGE_W / imgAspect;
-            drawX = 0;
-            drawY = (PAGE_H - drawH) / 2;
-          } else {
-            drawH = PAGE_H;
-            drawW = PAGE_H * imgAspect;
-            drawX = (PAGE_W - drawW) / 2;
-            drawY = 0;
+        // ─ Slide badge ─
+        pdf.setFillColor(79, 70, 229);
+        pdf.roundedRect(M, y, 32, 7, 1.5, 1.5, 'F');
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(`Slide ${i + 1} / ${slides.length}`, M + 3, y + 5);
+        y += 12;
+
+        // ─ Title ─
+        pdf.setTextColor(15, 23, 42);
+        pdf.setFontSize(16);
+        pdf.setFont('helvetica', 'bold');
+        const titleLines = pdf.splitTextToSize(title, CW);
+        pdf.text(titleLines, M, y);
+        y += titleLines.length * 7 + 4;
+
+        // ─ Divider ─
+        pdf.setDrawColor(200, 210, 225);
+        pdf.setLineWidth(0.4);
+        pdf.line(M, y, M + CW, y);
+        y += 6;
+
+        // ─ Content blocks ─
+        const blocks = extractBlocks(doc.body);
+
+        for (const block of blocks) {
+          const bIndent = block.indent || 0;
+
+          switch (block.type) {
+            case 'heading': {
+              y += 3;
+              const sz = block.level <= 1 ? 13 : block.level === 2 ? 11.5 : 10.5;
+              pdf.setFontSize(sz);
+              pdf.setFont('helvetica', 'bold');
+              pdf.setTextColor(15, 23, 42);
+              const lines = pdf.splitTextToSize(block.text, CW - bIndent);
+              const lh = sz * 0.45;
+              if (y + lines.length * lh > PH - M) { pdf.addPage(); y = M; }
+              pdf.text(lines, M + bIndent, y);
+              y += lines.length * lh + 2;
+              break;
+            }
+            case 'text': {
+              pdf.setFontSize(9.5);
+              pdf.setFont('helvetica', 'normal');
+              pdf.setTextColor(55, 65, 81);
+              const lines = pdf.splitTextToSize(block.text, CW - bIndent);
+              const lh = 4;
+              if (y + lines.length * lh > PH - M) { pdf.addPage(); y = M; }
+              pdf.text(lines, M + bIndent, y);
+              y += lines.length * lh + 1.5;
+              break;
+            }
+            case 'listItem': {
+              pdf.setFontSize(9.5);
+              pdf.setFont('helvetica', 'normal');
+              pdf.setTextColor(55, 65, 81);
+              const bx = M + bIndent;
+              const lines = pdf.splitTextToSize(block.text, CW - bIndent - 5);
+              const lh = 4;
+              if (y + lines.length * lh > PH - M) { pdf.addPage(); y = M; }
+              pdf.setFontSize(7);
+              pdf.text('\u2022', bx, y);
+              pdf.setFontSize(9.5);
+              pdf.text(lines, bx + 4, y);
+              y += lines.length * lh + 1;
+              break;
+            }
+            case 'link': {
+              pdf.setFontSize(9);
+              pdf.setFont('helvetica', 'normal');
+              pdf.setTextColor(79, 70, 229);
+              const lines = pdf.splitTextToSize(block.text, CW - bIndent);
+              const lh = 3.8;
+              if (y + lines.length * lh > PH - M) { pdf.addPage(); y = M; }
+              pdf.text(lines, M + bIndent, y);
+              y += lines.length * lh + 1.5;
+              pdf.setTextColor(55, 65, 81);
+              break;
+            }
+            case 'divider': {
+              y += 2;
+              pdf.setDrawColor(226, 232, 240);
+              pdf.setLineWidth(0.2);
+              pdf.line(M, y, M + CW, y);
+              y += 4;
+              break;
+            }
           }
-
-          pdf.addImage(dataUrl, 'JPEG', drawX, drawY, drawW, drawH);
         }
+      }
+
+      // ─ Page footer on every page ─
+      const totalPages = pdf.getNumberOfPages();
+      for (let p = 1; p <= totalPages; p++) {
+        pdf.setPage(p);
+        pdf.setFontSize(7);
+        pdf.setTextColor(156, 163, 175);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(
+          `${presentation?.title || 'Presentacion'} — Pag. ${p} / ${totalPages}`,
+          M, PH - 8
+        );
       }
 
       pdf.save(`${presentation?.title || 'Presentacion'}.pdf`);
@@ -213,7 +258,7 @@ export default function SharedViewer() {
     } finally {
       setDownloading(false);
     }
-  }, [downloading, slides, presentation, captureSlide]);
+  }, [downloading, slides, presentation, extractBlocks]);
 
   // Loading state
   if (loading) {
