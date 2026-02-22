@@ -5,7 +5,6 @@ import { dbSlideToUi } from '../types';
 import type { Slide as UiSlide } from '../types';
 import { Layers, ChevronLeft, ChevronRight, Maximize, Minimize, FileText, AlertTriangle, Download, Loader2 } from 'lucide-react';
 import SlideViewer from './SlideViewer';
-import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
 export default function SharedViewer() {
@@ -78,6 +77,86 @@ export default function SharedViewer() {
     }
   };
 
+  // Capture a single slide by rendering it in a hidden iframe, then running
+  // html2canvas INSIDE the iframe (same document context = all Tailwind/Chart.js
+  // styles are available). Result sent back via postMessage.
+  const captureSlide = useCallback((html: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const iframe = document.createElement('iframe');
+      iframe.style.cssText =
+        'position:fixed;left:0;top:0;width:1280px;height:960px;border:none;opacity:0;pointer-events:none;z-index:-1;';
+      document.body.appendChild(iframe);
+
+      let settled = false;
+      const cleanup = () => {
+        window.removeEventListener('message', onMsg);
+        if (iframe.parentNode) document.body.removeChild(iframe);
+      };
+
+      const onMsg = (e: MessageEvent) => {
+        if (e.data?.type === 'pdf-slide-capture' && e.source === iframe.contentWindow) {
+          settled = true;
+          cleanup();
+          resolve(e.data.dataUrl || '');
+        }
+      };
+      window.addEventListener('message', onMsg);
+
+      iframe.addEventListener('load', () => {
+        // Wait for Tailwind CDN + Chart.js + Google Fonts to fully process
+        setTimeout(() => {
+          try {
+            const iDoc = iframe.contentDocument;
+            if (!iDoc) { cleanup(); reject(new Error('No document')); return; }
+
+            // Measure full content, then resize iframe before capture
+            const fullW = Math.max(iDoc.documentElement.scrollWidth, iDoc.body.scrollWidth, 1280);
+            const fullH = Math.max(iDoc.documentElement.scrollHeight, iDoc.body.scrollHeight, 960);
+            iframe.style.width = fullW + 'px';
+            iframe.style.height = fullH + 'px';
+
+            // Inject html2canvas from CDN and run capture inside the iframe
+            const script = iDoc.createElement('script');
+            script.textContent = `
+              (function(){
+                var s=document.createElement('script');
+                s.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                s.onload=function(){
+                  var w=Math.max(document.documentElement.scrollWidth,document.body.scrollWidth,1280);
+                  var h=Math.max(document.documentElement.scrollHeight,document.body.scrollHeight,960);
+                  html2canvas(document.body,{
+                    width:w,height:h,scale:2,
+                    useCORS:true,allowTaint:true,
+                    backgroundColor:'#ffffff',logging:false
+                  }).then(function(c){
+                    window.parent.postMessage({type:'pdf-slide-capture',dataUrl:c.toDataURL('image/jpeg',0.92)},'*');
+                  }).catch(function(){
+                    window.parent.postMessage({type:'pdf-slide-capture',dataUrl:''},'*');
+                  });
+                };
+                s.onerror=function(){
+                  window.parent.postMessage({type:'pdf-slide-capture',dataUrl:''},'*');
+                };
+                document.head.appendChild(s);
+              })();
+            `;
+            iDoc.body.appendChild(script);
+          } catch (e) {
+            cleanup();
+            reject(e);
+          }
+        }, 3500);
+      }, { once: true });
+
+      iframe.srcdoc = html;
+
+      // Safety timeout — 20s per slide max
+      setTimeout(() => {
+        if (!settled) { cleanup(); reject(new Error('Timeout')); }
+      }, 20000);
+    });
+  }, []);
+
   const downloadPdf = useCallback(async () => {
     if (downloading || slides.length === 0) return;
     setDownloading(true);
@@ -95,43 +174,20 @@ export default function SharedViewer() {
       for (let i = 0; i < slides.length; i++) {
         if (i > 0) pdf.addPage();
 
-        // Create hidden iframe to render the slide with all its scripts
-        const iframe = document.createElement('iframe');
-        iframe.style.cssText = 'position:fixed;left:0;top:0;width:1280px;height:720px;border:none;opacity:0;pointer-events:none;z-index:-1;';
-        document.body.appendChild(iframe);
+        const dataUrl = await captureSlide(
+          sanitize(slides[i].htmlContent || '<html><body><p>Slide</p></body></html>')
+        );
 
-        // Load slide HTML and wait for full render (Tailwind CDN, Chart.js, fonts)
-        await new Promise<void>((resolve) => {
-          iframe.addEventListener('load', () => setTimeout(resolve, 3500), { once: true });
-          iframe.srcdoc = sanitize(slides[i].htmlContent || '<html><body><p>Slide vacia</p></body></html>');
-        });
-
-        // Capture the rendered slide
-        const iDoc = iframe.contentDocument;
-        if (iDoc && iDoc.body) {
-          // Measure full content dimensions
-          const fullW = Math.max(iDoc.documentElement.scrollWidth, iDoc.body.scrollWidth, 1280);
-          const fullH = Math.max(iDoc.documentElement.scrollHeight, iDoc.body.scrollHeight, 720);
-
-          // Resize iframe to show ALL content
-          iframe.style.width = fullW + 'px';
-          iframe.style.height = fullH + 'px';
-          await new Promise(r => setTimeout(r, 300));
-
-          const canvas = await html2canvas(iDoc.body, {
-            width: fullW,
-            height: fullH,
-            scale: 2,
-            useCORS: true,
-            allowTaint: true,
-            logging: false,
-            backgroundColor: '#ffffff',
+        if (dataUrl) {
+          // Decode image dimensions to calculate aspect ratio
+          const img = new Image();
+          await new Promise<void>((res, rej) => {
+            img.onload = () => res();
+            img.onerror = () => rej(new Error('img load fail'));
+            img.src = dataUrl;
           });
 
-          const imgData = canvas.toDataURL('image/jpeg', 0.92);
-
-          // Fit image into A4 landscape, centered
-          const imgAspect = fullW / fullH;
+          const imgAspect = img.width / img.height;
           const pageAspect = PAGE_W / PAGE_H;
           let drawW: number, drawH: number, drawX: number, drawY: number;
 
@@ -147,10 +203,8 @@ export default function SharedViewer() {
             drawY = 0;
           }
 
-          pdf.addImage(imgData, 'JPEG', drawX, drawY, drawW, drawH);
+          pdf.addImage(dataUrl, 'JPEG', drawX, drawY, drawW, drawH);
         }
-
-        document.body.removeChild(iframe);
       }
 
       pdf.save(`${presentation?.title || 'Presentacion'}.pdf`);
@@ -159,7 +213,7 @@ export default function SharedViewer() {
     } finally {
       setDownloading(false);
     }
-  }, [downloading, slides, presentation]);
+  }, [downloading, slides, presentation, captureSlide]);
 
   // Loading state
   if (loading) {
