@@ -39,7 +39,10 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
   const sanitizeHtml = useCallback((html: string): string => {
     return html
       .replace(/\s*contenteditable="[^"]*"/gi, '')
-      .replace(/\s*data-visual-edit(="[^"]*")?/gi, '');
+      .replace(/\s*data-visual-edit(="[^"]*")?/gi, '')
+      // Strip leaked configureIframe inline styles from <html> and <body> tags
+      .replace(/(<html[^>]*)\s+style="[^"]*"/gi, '$1')
+      .replace(/(<body[^>]*)\s+style="[^"]*"/gi, '$1');
   }, []);
 
   // ── Extract clean HTML from iframe (strips all our edit artifacts) ──
@@ -55,6 +58,11 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
       el.removeAttribute('contenteditable');
       el.removeAttribute(EDIT_MARKER);
     });
+
+    // Strip leaked configureIframe inline styles from html/body
+    clone.removeAttribute('style');
+    const bodyClone = clone.querySelector('body');
+    if (bodyClone) bodyClone.removeAttribute('style');
 
     return clone.outerHTML;
   }, []);
@@ -208,9 +216,20 @@ export default function SlideViewer({ slide, onSlideUpdate, isPresentation = fal
             }
 
             const iframeHtml = iframeDoc.documentElement;
-            if (iframeHtml && !isPresentation) {
-              iframeHtml.style.height = 'auto';
-              iframeHtml.style.overflow = 'visible';
+            if (iframeHtml) {
+              if (isPresentation) {
+                // Remove any leaked inline styles from previous editor saves
+                iframeHtml.removeAttribute('style');
+                iframeBody?.removeAttribute('style');
+                // Re-apply only margin/padding 0
+                if (iframeBody) {
+                  iframeBody.style.margin = '0';
+                  iframeBody.style.padding = '0';
+                }
+              } else {
+                iframeHtml.style.height = 'auto';
+                iframeHtml.style.overflow = 'visible';
+              }
             }
 
             if (!iframeDoc.querySelector('meta[name="viewport"]')) {
