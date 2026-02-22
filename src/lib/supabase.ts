@@ -297,55 +297,22 @@ export const shareLinkService = {
   },
 
   // PUBLIC: Resolve a share link by token (no auth required)
+  // Uses SECURITY DEFINER RPC to bypass RLS for unauthenticated access
   async resolveShareLink(token: string): Promise<{
     shareLink: ShareLink;
     presentation: Presentation;
     slides: Slide[];
   } | null> {
-    // Get the share link
-    const { data: link, error: linkError } = await supabase
-      .from('share_links')
-      .select('*')
-      .eq('token', token)
-      .eq('is_active', true)
-      .single();
+    const { data, error } = await supabase.rpc('resolve_share_link', {
+      link_token: token,
+    });
 
-    if (linkError || !link) return null;
-
-    // Check expiration
-    if (link.expires_at && new Date(link.expires_at) < new Date()) return null;
-
-    // Get presentation
-    const { data: presentation, error: presError } = await supabase
-      .from('presentations')
-      .select('*')
-      .eq('id', link.presentation_id)
-      .single();
-
-    if (presError || !presentation) return null;
-
-    // Get slides
-    let slidesQuery = supabase
-      .from('slides')
-      .select('*')
-      .eq('presentation_id', link.presentation_id)
-      .order('slide_order', { ascending: true });
-
-    // If specific slide, filter to just that one
-    if (link.slide_id) {
-      slidesQuery = slidesQuery.eq('id', link.slide_id);
-    }
-
-    const { data: slides, error: slidesError } = await slidesQuery;
-    if (slidesError) return null;
-
-    // Increment view count (fire and forget)
-    supabase.rpc('increment_share_link_views', { link_token: token }).then(() => {});
+    if (error || !data) return null;
 
     return {
-      shareLink: link as ShareLink,
-      presentation: presentation as Presentation,
-      slides: (slides || []) as Slide[],
+      shareLink: data.share_link as ShareLink,
+      presentation: data.presentation as Presentation,
+      slides: (data.slides || []) as Slide[],
     };
   },
 };
