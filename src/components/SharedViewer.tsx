@@ -84,13 +84,26 @@ export default function SharedViewer() {
     const parser = new DOMParser();
     const presTitle = presentation?.title || 'Presentacion';
 
-    // Sanitize: strip editing artifacts
+    // Sanitize: strip editing artifacts + fix viewport units for print
     const sanitize = (html: string): string =>
       html
         .replace(/\s*contenteditable="[^"]*"/gi, '')
         .replace(/\s*data-visual-edit(="[^"]*")?/gi, '')
         .replace(/<html[^>]*\s+style="[^"]*"/gi, (m) => m.replace(/\s+style="[^"]*"/, ''))
         .replace(/<body[^>]*\s+style="[^"]*"/gi, (m) => m.replace(/\s+style="[^"]*"/, ''));
+
+    // Transform CSS: replace viewport units, strip html/body overflow:hidden
+    const transformCss = (css: string): string =>
+      css
+        // Replace 100vh/100vw with A4 landscape dimensions
+        .replace(/100vh/g, '210mm')
+        .replace(/100vw/g, '297mm')
+        // Remove overflow:hidden from html,body rules (kills multi-page)
+        .replace(/(html|body)\s*,?\s*(html|body)?\s*\{[^}]*\}/gi, (block) =>
+          block
+            .replace(/overflow\s*:\s*hidden\s*;?/gi, '')
+            .replace(/height\s*:\s*100%\s*;?/gi, '')
+        );
 
     // Collect unique styles + fonts from ALL slides, extract body content
     const stylesSeen = new Set<string>();
@@ -102,14 +115,26 @@ export default function SharedViewer() {
 
       // Gather <style> and <link rel="stylesheet"> from each slide
       doc.querySelectorAll('style, link[rel="stylesheet"]').forEach(el => {
-        const key = el.outerHTML;
-        if (!stylesSeen.has(key)) {
-          stylesSeen.add(key);
-          stylesList.push(key);
+        if (el.tagName === 'STYLE') {
+          // Transform CSS to fix viewport units and strip overflow:hidden
+          const transformed = transformCss(el.textContent || '');
+          const key = transformed;
+          if (!stylesSeen.has(key)) {
+            stylesSeen.add(key);
+            stylesList.push(`<style>${transformed}</style>`);
+          }
+        } else {
+          const key = el.outerHTML;
+          if (!stylesSeen.has(key)) {
+            stylesSeen.add(key);
+            stylesList.push(key);
+          }
         }
       });
 
-      const bodyHtml = doc.body ? doc.body.innerHTML : clean;
+      // Also replace viewport units in inline styles within body HTML
+      let bodyHtml = doc.body ? doc.body.innerHTML : clean;
+      bodyHtml = bodyHtml.replace(/100vh/g, '210mm').replace(/100vw/g, '297mm');
 
       return `<div class="slide-page"><div class="slide-inner">${bodyHtml}</div><div class="slide-badge">${i + 1} / ${slides.length}</div></div>`;
     });
@@ -159,7 +184,9 @@ export default function SharedViewer() {
       @page { size: landscape; margin: 0; }
       *, *::before, *::after { box-sizing: border-box; }
       html, body {
-        margin: 0; padding: 0;
+        margin: 0 !important; padding: 0 !important;
+        height: auto !important;
+        overflow: visible !important;
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
