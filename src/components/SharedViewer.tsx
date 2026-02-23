@@ -76,7 +76,7 @@ export default function SharedViewer() {
     }
   };
 
-  // ── PDF: render actual slide HTML with full styling via print window ──
+  // ── PDF: continuous flow — no fixed pages, no overflow:hidden, just all content ──
   const downloadPdf = useCallback(() => {
     if (downloading || slides.length === 0) return;
     setDownloading(true);
@@ -84,43 +84,35 @@ export default function SharedViewer() {
     const parser = new DOMParser();
     const presTitle = presentation?.title || 'Presentacion';
 
-    // Sanitize: strip editing artifacts + fix viewport units for print
+    // Strip editing artifacts
     const sanitize = (html: string): string =>
       html
         .replace(/\s*contenteditable="[^"]*"/gi, '')
-        .replace(/\s*data-visual-edit(="[^"]*")?/gi, '')
-        .replace(/<html[^>]*\s+style="[^"]*"/gi, (m) => m.replace(/\s+style="[^"]*"/, ''))
-        .replace(/<body[^>]*\s+style="[^"]*"/gi, (m) => m.replace(/\s+style="[^"]*"/, ''));
+        .replace(/\s*data-visual-edit(="[^"]*")?/gi, '');
 
-    // Transform CSS: replace viewport units, strip html/body overflow:hidden
+    // Transform CSS for print: remove anything that constrains/hides content
     const transformCss = (css: string): string =>
       css
-        // Replace 100vh/100vw with A4 landscape dimensions
-        .replace(/100vh/g, '210mm')
-        .replace(/100vw/g, '297mm')
-        // Remove overflow:hidden from html,body rules (kills multi-page)
-        .replace(/(html|body)\s*,?\s*(html|body)?\s*\{[^}]*\}/gi, (block) =>
-          block
-            .replace(/overflow\s*:\s*hidden\s*;?/gi, '')
-            .replace(/height\s*:\s*100%\s*;?/gi, '')
-        );
+        .replace(/100vh/g, 'auto')
+        .replace(/100vw/g, '100%')
+        .replace(/overflow\s*:\s*hidden/gi, 'overflow: visible')
+        .replace(/height\s*:\s*100%/g, 'height: auto')
+        .replace(/min-height\s*:\s*100vh/g, 'min-height: auto')
+        .replace(/max-height\s*:\s*100vh/g, 'max-height: none');
 
-    // Collect unique styles + fonts from ALL slides, extract body content
+    // Collect styles + build slide sections
     const stylesSeen = new Set<string>();
     const stylesList: string[] = [];
 
-    const slidePages = slides.map((s, i) => {
+    const sections = slides.map((s, i) => {
       const clean = sanitize(s.htmlContent || '');
       const doc = parser.parseFromString(clean, 'text/html');
 
-      // Gather <style> and <link rel="stylesheet"> from each slide
       doc.querySelectorAll('style, link[rel="stylesheet"]').forEach(el => {
         if (el.tagName === 'STYLE') {
-          // Transform CSS to fix viewport units and strip overflow:hidden
           const transformed = transformCss(el.textContent || '');
-          const key = transformed;
-          if (!stylesSeen.has(key)) {
-            stylesSeen.add(key);
+          if (!stylesSeen.has(transformed)) {
+            stylesSeen.add(transformed);
             stylesList.push(`<style>${transformed}</style>`);
           }
         } else {
@@ -132,14 +124,26 @@ export default function SharedViewer() {
         }
       });
 
-      // Also replace viewport units in inline styles within body HTML
       let bodyHtml = doc.body ? doc.body.innerHTML : clean;
-      bodyHtml = bodyHtml.replace(/100vh/g, '210mm').replace(/100vw/g, '297mm');
+      bodyHtml = bodyHtml
+        .replace(/100vh/g, 'auto')
+        .replace(/100vw/g, '100%')
+        .replace(/overflow:\s*hidden/g, 'overflow: visible');
 
-      return `<div class="slide-page"><div class="slide-inner">${bodyHtml}</div><div class="slide-badge">${i + 1} / ${slides.length}</div></div>`;
+      const slideTitle = doc.querySelector('title')?.textContent?.trim() || `Slide ${i + 1}`;
+
+      return `
+        <section class="slide-section">
+          <div class="slide-header">
+            <span class="slide-num">${i + 1}</span>
+            <span class="slide-title">${slideTitle}</span>
+          </div>
+          <div class="slide-body">${bodyHtml}</div>
+        </section>
+      `;
     });
 
-    // Open print window and build the document
+    // Open print window
     const pw = window.open('', '_blank');
     if (!pw) { setDownloading(false); return; }
 
@@ -147,189 +151,179 @@ export default function SharedViewer() {
     pd.open();
     pd.write('<!DOCTYPE html><html><head><meta charset="utf-8"></head><body></body></html>');
     pd.close();
-
     pd.title = presTitle + ' — PDF';
 
-    // ── Add Tailwind CDN + Google Fonts ──
-    const tailwind = pd.createElement('script');
-    tailwind.src = 'https://cdn.tailwindcss.com';
-    pd.head.appendChild(tailwind);
+    // Tailwind CDN + Google Fonts
+    const tw = pd.createElement('script');
+    tw.src = 'https://cdn.tailwindcss.com';
+    pd.head.appendChild(tw);
 
-    const gfPre1 = pd.createElement('link');
-    gfPre1.rel = 'preconnect';
-    gfPre1.href = 'https://fonts.googleapis.com';
-    pd.head.appendChild(gfPre1);
+    ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'].forEach(href => {
+      const link = pd.createElement('link');
+      link.rel = 'preconnect';
+      link.href = href;
+      if (href.includes('gstatic')) link.crossOrigin = '';
+      pd.head.appendChild(link);
+    });
 
-    const gfPre2 = pd.createElement('link');
-    gfPre2.rel = 'preconnect';
-    gfPre2.href = 'https://fonts.gstatic.com';
-    gfPre2.crossOrigin = '';
-    pd.head.appendChild(gfPre2);
+    const gf = pd.createElement('link');
+    gf.rel = 'stylesheet';
+    gf.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap';
+    pd.head.appendChild(gf);
 
-    const gfLink = pd.createElement('link');
-    gfLink.rel = 'stylesheet';
-    gfLink.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap';
-    pd.head.appendChild(gfLink);
+    // Slide styles
+    const sd = pd.createElement('div');
+    sd.innerHTML = stylesList.join('\n');
+    while (sd.firstChild) pd.head.appendChild(sd.firstChild);
 
-    // ── Add collected slide styles ──
-    const stylesDiv = pd.createElement('div');
-    stylesDiv.innerHTML = stylesList.join('\n');
-    while (stylesDiv.firstChild) {
-      pd.head.appendChild(stylesDiv.firstChild);
-    }
-
-    // ── Print layout CSS ──
-    const layoutStyle = pd.createElement('style');
-    layoutStyle.textContent = `
-      @page { size: landscape; margin: 0; }
+    // Layout CSS — continuous flow, no fixed dimensions
+    const style = pd.createElement('style');
+    style.textContent = `
+      @page { margin: 10mm 12mm; }
       *, *::before, *::after { box-sizing: border-box; }
       html, body {
         margin: 0 !important; padding: 0 !important;
         height: auto !important;
         overflow: visible !important;
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        background: #fff !important;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
         color-adjust: exact !important;
       }
-      .slide-page {
-        width: 297mm; height: 210mm;
-        position: relative;
-        overflow: hidden;
-        page-break-after: always;
-        break-after: page;
-        background: #ffffff;
+      .slide-section {
+        width: 100%;
+        overflow: visible !important;
+        margin-bottom: 16px;
+        page-break-inside: avoid;
       }
-      .slide-page:last-child {
-        page-break-after: auto;
-        break-after: auto;
-      }
-      .slide-inner {
-        width: 297mm; height: 210mm;
-        overflow: hidden;
-        transform-origin: top left;
-      }
-      .slide-badge {
-        position: absolute;
-        bottom: 5mm; right: 6mm;
-        font-size: 8px;
-        color: rgba(0,0,0,0.25);
+      .slide-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 16px;
+        background: linear-gradient(135deg, #4338ca, #6366f1);
+        color: #fff;
+        border-radius: 8px 8px 0 0;
         font-family: 'Inter', sans-serif;
-        z-index: 9999;
+      }
+      .slide-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px; height: 28px;
+        background: rgba(255,255,255,0.2);
+        border-radius: 50%;
+        font-weight: 700;
+        font-size: 13px;
+        flex-shrink: 0;
+      }
+      .slide-title {
+        font-weight: 600;
+        font-size: 15px;
+      }
+      .slide-body {
+        overflow: visible !important;
+        padding: 0;
+        border: 1px solid #e5e7eb;
+        border-top: none;
+        border-radius: 0 0 8px 8px;
+        background: #fff;
+      }
+      .slide-body > * {
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: visible !important;
+      }
+      /* Override any grid/flex that uses 100vh */
+      .main-grid, [class*="grid"] {
+        height: auto !important;
+        min-height: 0 !important;
+      }
+      /* Make sure scrollable areas show all content */
+      [style*="overflow"], .overflow-y-auto, .overflow-auto, .overflow-hidden, .overflow-x-auto {
+        overflow: visible !important;
+        max-height: none !important;
+        height: auto !important;
       }
       img { max-width: 100%; height: auto; }
-      /* Screen preview styles */
+      /* Separator between slides */
+      .slide-section + .slide-section { margin-top: 24px; }
+      /* Screen preview */
       @media screen {
-        html { background: #1e1b4b; }
-        body { background: #1e1b4b; padding: 24px; }
-        .slide-page {
-          margin: 0 auto 24px;
-          box-shadow: 0 8px 30px rgba(0,0,0,0.4);
-          border-radius: 8px;
-        }
-        /* Loading overlay */
+        html { background: #f1f5f9; }
+        body { background: #f1f5f9; padding: 24px; max-width: 1100px; margin: 0 auto; }
         .pdf-loading {
-          position: fixed; inset: 0;
-          background: #1e1b4b;
+          position: fixed; inset: 0; background: rgba(30,27,75,0.95);
           display: flex; align-items: center; justify-content: center;
-          z-index: 99999;
-          flex-direction: column; gap: 16px;
-          color: white; font-family: 'Inter', sans-serif;
+          flex-direction: column; gap: 12px; z-index: 99999;
+          color: #fff; font-family: 'Inter', sans-serif;
         }
         .pdf-loading .spinner {
-          width: 36px; height: 36px;
+          width: 32px; height: 32px;
           border: 3px solid rgba(255,255,255,0.15);
           border-top-color: #818cf8;
           border-radius: 50%;
           animation: spin 0.8s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .pdf-loading p { font-size: 14px; color: #c7d2fe; }
+        .pdf-loading p { font-size: 14px; color: #c7d2fe; margin: 0; }
         .pdf-loading small { font-size: 11px; color: #818cf8; }
       }
     `;
-    pd.head.appendChild(layoutStyle);
+    pd.head.appendChild(style);
 
-    // ── Loading overlay ──
-    const loadingDiv = pd.createElement('div');
-    loadingDiv.className = 'pdf-loading';
-    loadingDiv.innerHTML = '<div class="spinner"></div><p>Preparando PDF...</p><small>Se abrira el dialogo de impresion. Selecciona "Guardar como PDF".</small>';
-    pd.body.appendChild(loadingDiv);
+    // Loading overlay
+    const lo = pd.createElement('div');
+    lo.className = 'pdf-loading';
+    lo.innerHTML = '<div class="spinner"></div><p>Preparando PDF...</p><small>Se abrira el dialogo de impresion. Selecciona "Guardar como PDF".</small>';
+    pd.body.appendChild(lo);
 
-    // ── Insert slide pages ──
-    const container = pd.createElement('div');
-    container.innerHTML = slidePages.join('');
-    while (container.firstChild) {
-      pd.body.appendChild(container.firstChild);
-    }
+    // Insert all slide sections
+    const c = pd.createElement('div');
+    c.innerHTML = sections.join('');
+    while (c.firstChild) pd.body.appendChild(c.firstChild);
 
-    // ── Wait for Tailwind CDN + fonts, then scale + print ──
-    const printScript = pd.createElement('script');
-    printScript.textContent = `
+    // Wait for Tailwind + fonts, then print
+    const sc = pd.createElement('script');
+    sc.textContent = `
       (function() {
-        function doScaleAndPrint() {
-          var pages = document.querySelectorAll('.slide-page');
-          // Measure mm-to-px
-          var ruler = document.createElement('div');
-          ruler.style.cssText = 'position:absolute;visibility:hidden;width:297mm;height:210mm;';
-          document.body.appendChild(ruler);
-          var pageW = ruler.offsetWidth;
-          var pageH = ruler.offsetHeight;
-          document.body.removeChild(ruler);
-
-          pages.forEach(function(page) {
-            var inner = page.querySelector('.slide-inner');
-            if (!inner) return;
-            // Temporarily let content expand to measure
-            inner.style.width = pageW + 'px';
-            inner.style.height = 'auto';
-            inner.style.overflow = 'visible';
-            var cw = Math.max(inner.scrollWidth, pageW);
-            var ch = Math.max(inner.scrollHeight, pageH);
-            var sx = pageW / cw;
-            var sy = pageH / ch;
-            var scale = Math.min(sx, sy, 1);
-            if (scale < 0.99) {
-              inner.style.transform = 'scale(' + scale + ')';
-              inner.style.width = (pageW / scale) + 'px';
-              inner.style.height = (pageH / scale) + 'px';
-            } else {
-              inner.style.width = pageW + 'px';
-              inner.style.height = pageH + 'px';
+        function doPrint() {
+          // Force all elements to be visible
+          document.querySelectorAll('*').forEach(function(el) {
+            var s = getComputedStyle(el);
+            if (s.overflow === 'hidden' || s.overflowY === 'hidden') {
+              el.style.setProperty('overflow', 'visible', 'important');
             }
-            inner.style.overflow = 'hidden';
+            if (s.height && s.height.includes('vh')) {
+              el.style.setProperty('height', 'auto', 'important');
+            }
+            if (s.maxHeight !== 'none' && s.maxHeight !== '') {
+              el.style.setProperty('max-height', 'none', 'important');
+            }
           });
-
-          // Remove loading overlay
+          // Remove loading
           var lo = document.querySelector('.pdf-loading');
           if (lo) lo.remove();
-
-          // Print
-          setTimeout(function() { window.print(); }, 400);
+          setTimeout(function() { window.print(); }, 300);
         }
-
-        // Wait for Tailwind CDN to finish processing
         var attempts = 0;
         var check = setInterval(function() {
           attempts++;
-          var ready = !!document.querySelector('style') && attempts > 10;
-          if (ready || attempts > 40) {
+          if (attempts > 40 || (document.querySelector('style') && attempts > 8)) {
             clearInterval(check);
-            // Extra wait for fonts + images
             if (document.fonts && document.fonts.ready) {
-              document.fonts.ready.then(function() {
-                setTimeout(doScaleAndPrint, 800);
-              });
+              document.fonts.ready.then(function() { setTimeout(doPrint, 600); });
             } else {
-              setTimeout(doScaleAndPrint, 2000);
+              setTimeout(doPrint, 1500);
             }
           }
         }, 200);
       })();
     `;
-    pd.body.appendChild(printScript);
+    pd.body.appendChild(sc);
 
-    // Reset state after delay
     setTimeout(() => setDownloading(false), 6000);
   }, [downloading, slides, presentation]);
 
