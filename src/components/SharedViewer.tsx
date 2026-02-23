@@ -124,18 +124,34 @@ export default function SharedViewer() {
     return blocks;
   }, []);
 
-  // ── PDF generation: pure text extraction + jsPDF ──
+  // ── PDF generation with visual design ──
   const downloadPdf = useCallback(async () => {
     if (downloading || slides.length === 0) return;
     setDownloading(true);
 
     try {
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const PW = 210, PH = 297, M = 15, CW = PW - M * 2;
+      const PW = 210, PH = 297, M = 18, CW = PW - M * 2;
       const parser = new DOMParser();
+      const presTitle = presentation?.title || 'Presentacion';
+
+      // ── Helper: check if we need a page break ──
+      const needsBreak = (y: number, needed: number) => y + needed > PH - 20;
+      const newPage = (pdf: jsPDF) => { pdf.addPage(); return M + 12; };
+
+      // ── Helper: draw page header (top bar) ──
+      const drawPageHeader = (pdf: jsPDF) => {
+        pdf.setFillColor(30, 27, 75);
+        pdf.rect(0, 0, PW, 10, 'F');
+        pdf.setFontSize(7);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(180, 180, 220);
+        pdf.text(presTitle, M, 6.5);
+      };
 
       for (let i = 0; i < slides.length; i++) {
         if (i > 0) pdf.addPage();
+        drawPageHeader(pdf);
 
         const cleanHtml = (slides[i].htmlContent || '')
           .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
@@ -144,115 +160,164 @@ export default function SharedViewer() {
         const doc = parser.parseFromString(cleanHtml, 'text/html');
         const title = doc.querySelector('title')?.textContent?.trim() || `Slide ${i + 1}`;
 
-        let y = M;
+        let y = 16;
 
-        // ─ Slide badge ─
-        pdf.setFillColor(79, 70, 229);
-        pdf.roundedRect(M, y, 32, 7, 1.5, 1.5, 'F');
+        // ─── Slide title banner (full-width colored block) ───
+        const titleLines = pdf.splitTextToSize(title, CW - 20);
+        const bannerH = Math.max(titleLines.length * 7 + 10, 18);
+        pdf.setFillColor(67, 56, 202);
+        pdf.roundedRect(M, y, CW, bannerH, 2, 2, 'F');
+        // Slide number circle
+        pdf.setFillColor(255, 255, 255, 30);
+        pdf.setFillColor(99, 102, 241);
+        pdf.circle(M + 9, y + bannerH / 2, 5, 'F');
         pdf.setTextColor(255, 255, 255);
-        pdf.setFontSize(8);
+        pdf.setFontSize(10);
         pdf.setFont('helvetica', 'bold');
-        pdf.text(`Slide ${i + 1} / ${slides.length}`, M + 3, y + 5);
-        y += 12;
-
-        // ─ Title ─
-        pdf.setTextColor(15, 23, 42);
-        pdf.setFontSize(16);
+        pdf.text(`${i + 1}`, M + 9, y + bannerH / 2 + 1, { align: 'center' });
+        // Title text
+        pdf.setFontSize(14);
         pdf.setFont('helvetica', 'bold');
-        const titleLines = pdf.splitTextToSize(title, CW);
-        pdf.text(titleLines, M, y);
-        y += titleLines.length * 7 + 4;
+        pdf.setTextColor(255, 255, 255);
+        const titleY = y + (bannerH - titleLines.length * 6) / 2 + 5;
+        pdf.text(titleLines, M + 18, titleY);
+        // Subtitle: slide count
+        pdf.setFontSize(7);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(200, 200, 255);
+        pdf.text(`Slide ${i + 1} de ${slides.length}`, M + CW - 3, y + bannerH - 3, { align: 'right' });
+        y += bannerH + 6;
 
-        // ─ Divider ─
-        pdf.setDrawColor(200, 210, 225);
-        pdf.setLineWidth(0.4);
-        pdf.line(M, y, M + CW, y);
-        y += 6;
-
-        // ─ Content blocks ─
+        // ─── Content blocks ───
         const blocks = extractBlocks(doc.body);
+        let prevType = '';
 
-        for (const block of blocks) {
+        for (let b = 0; b < blocks.length; b++) {
+          const block = blocks[b];
           const bIndent = block.indent || 0;
 
           switch (block.type) {
             case 'heading': {
-              y += 3;
-              const sz = block.level <= 1 ? 13 : block.level === 2 ? 11.5 : 10.5;
+              // Extra space before headings (visual breathing room)
+              if (prevType && prevType !== 'heading') y += 4;
+
+              const isH1 = block.level <= 2;
+              const sz = isH1 ? 12 : 10.5;
+              const textLines = pdf.splitTextToSize(block.text, CW - bIndent - 6);
+              const blockH = textLines.length * (sz * 0.45) + 4;
+
+              if (needsBreak(y, blockH + 4)) { y = newPage(pdf); drawPageHeader(pdf); }
+
+              if (isH1) {
+                // Accent bar + light background for main headings
+                pdf.setFillColor(243, 244, 246);
+                pdf.roundedRect(M + bIndent, y - 2, CW - bIndent, blockH + 2, 1.5, 1.5, 'F');
+                pdf.setFillColor(79, 70, 229);
+                pdf.rect(M + bIndent, y - 2, 1.2, blockH + 2, 'F');
+              } else {
+                // Small accent bar for sub-headings
+                pdf.setFillColor(165, 160, 240);
+                pdf.rect(M + bIndent, y - 1, 0.8, blockH, 'F');
+              }
+
               pdf.setFontSize(sz);
               pdf.setFont('helvetica', 'bold');
-              pdf.setTextColor(15, 23, 42);
-              const lines = pdf.splitTextToSize(block.text, CW - bIndent);
-              const lh = sz * 0.45;
-              if (y + lines.length * lh > PH - M) { pdf.addPage(); y = M; }
-              pdf.text(lines, M + bIndent, y);
-              y += lines.length * lh + 2;
+              pdf.setTextColor(30, 41, 59);
+              pdf.text(textLines, M + bIndent + (isH1 ? 5 : 4), y + 2);
+              y += blockH + 3;
               break;
             }
+
             case 'text': {
               pdf.setFontSize(9.5);
               pdf.setFont('helvetica', 'normal');
               pdf.setTextColor(55, 65, 81);
-              const lines = pdf.splitTextToSize(block.text, CW - bIndent);
-              const lh = 4;
-              if (y + lines.length * lh > PH - M) { pdf.addPage(); y = M; }
-              pdf.text(lines, M + bIndent, y);
-              y += lines.length * lh + 1.5;
+              const textLines = pdf.splitTextToSize(block.text, CW - bIndent - 2);
+              const lh = 4.2;
+              const blockH = textLines.length * lh;
+
+              if (needsBreak(y, blockH)) { y = newPage(pdf); drawPageHeader(pdf); }
+
+              pdf.text(textLines, M + bIndent + 2, y);
+              y += blockH + 2;
               break;
             }
+
             case 'listItem': {
               pdf.setFontSize(9.5);
               pdf.setFont('helvetica', 'normal');
               pdf.setTextColor(55, 65, 81);
-              const bx = M + bIndent;
-              const lines = pdf.splitTextToSize(block.text, CW - bIndent - 5);
-              const lh = 4;
-              if (y + lines.length * lh > PH - M) { pdf.addPage(); y = M; }
-              pdf.setFontSize(7);
-              pdf.text('\u2022', bx, y);
-              pdf.setFontSize(9.5);
-              pdf.text(lines, bx + 4, y);
-              y += lines.length * lh + 1;
+              const bx = M + bIndent + 2;
+              const textLines = pdf.splitTextToSize(block.text, CW - bIndent - 9);
+              const lh = 4.2;
+              const blockH = textLines.length * lh;
+
+              if (needsBreak(y, blockH)) { y = newPage(pdf); drawPageHeader(pdf); }
+
+              // Colored bullet
+              pdf.setFillColor(99, 102, 241);
+              pdf.circle(bx + 1.2, y - 1, 1, 'F');
+              pdf.text(textLines, bx + 5, y);
+              y += blockH + 1.5;
               break;
             }
+
             case 'link': {
               pdf.setFontSize(9);
               pdf.setFont('helvetica', 'normal');
               pdf.setTextColor(79, 70, 229);
-              const lines = pdf.splitTextToSize(block.text, CW - bIndent);
-              const lh = 3.8;
-              if (y + lines.length * lh > PH - M) { pdf.addPage(); y = M; }
-              pdf.text(lines, M + bIndent, y);
-              y += lines.length * lh + 1.5;
+              const textLines = pdf.splitTextToSize(block.text, CW - bIndent - 2);
+              const lh = 4;
+              const blockH = textLines.length * lh;
+
+              if (needsBreak(y, blockH)) { y = newPage(pdf); drawPageHeader(pdf); }
+
+              // Link icon (small underline)
+              pdf.text(textLines, M + bIndent + 2, y);
+              const lastLineW = pdf.getTextWidth(textLines[textLines.length - 1]);
+              pdf.setDrawColor(99, 102, 241);
+              pdf.setLineWidth(0.2);
+              const underlineY = y + (textLines.length - 1) * lh + 1;
+              pdf.line(M + bIndent + 2, underlineY, M + bIndent + 2 + Math.min(lastLineW, CW), underlineY);
+              y += blockH + 2;
               pdf.setTextColor(55, 65, 81);
               break;
             }
+
             case 'divider': {
-              y += 2;
-              pdf.setDrawColor(226, 232, 240);
-              pdf.setLineWidth(0.2);
-              pdf.line(M, y, M + CW, y);
-              y += 4;
+              y += 3;
+              if (needsBreak(y, 6)) { y = newPage(pdf); drawPageHeader(pdf); }
+              pdf.setDrawColor(210, 215, 225);
+              pdf.setLineWidth(0.3);
+              const dashLen = 2;
+              for (let dx = M; dx < M + CW; dx += dashLen * 2) {
+                pdf.line(dx, y, Math.min(dx + dashLen, M + CW), y);
+              }
+              y += 5;
               break;
             }
           }
+          prevType = block.type;
         }
       }
 
-      // ─ Page footer on every page ─
+      // ── Page footer on every page ──
       const totalPages = pdf.getNumberOfPages();
       for (let p = 1; p <= totalPages; p++) {
         pdf.setPage(p);
+        // Thin line above footer
+        pdf.setDrawColor(220, 225, 235);
+        pdf.setLineWidth(0.2);
+        pdf.line(M, PH - 12, M + CW, PH - 12);
+        // Footer text
         pdf.setFontSize(7);
-        pdf.setTextColor(156, 163, 175);
         pdf.setFont('helvetica', 'normal');
-        pdf.text(
-          `${presentation?.title || 'Presentacion'} — Pag. ${p} / ${totalPages}`,
-          M, PH - 8
-        );
+        pdf.setTextColor(156, 163, 175);
+        pdf.text(presTitle, M, PH - 8);
+        pdf.text(`Pag. ${p} / ${totalPages}`, M + CW, PH - 8, { align: 'right' });
       }
 
-      pdf.save(`${presentation?.title || 'Presentacion'}.pdf`);
+      pdf.save(`${presTitle}.pdf`);
     } catch (err) {
       console.error('Error generating PDF:', err);
     } finally {
