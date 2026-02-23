@@ -5,7 +5,6 @@ import { dbSlideToUi } from '../types';
 import type { Slide as UiSlide } from '../types';
 import { Layers, ChevronLeft, ChevronRight, Maximize, Minimize, FileText, AlertTriangle, Download, Loader2 } from 'lucide-react';
 import SlideViewer from './SlideViewer';
-import jsPDF from 'jspdf';
 
 export default function SharedViewer() {
   const { token } = useParams<{ token: string }>();
@@ -77,253 +76,235 @@ export default function SharedViewer() {
     }
   };
 
-  // ── PDF: extract structured text blocks from HTML ──
-  const extractBlocks = useCallback((el: Element, indent = 0): Array<{type: string; text: string; level: number; indent: number}> => {
-    const blocks: Array<{type: string; text: string; level: number; indent: number}> = [];
-
-    for (const child of Array.from(el.children)) {
-      const tag = child.tagName.toLowerCase();
-      const text = child.textContent?.trim();
-
-      if (!text || ['script','style','svg','canvas','noscript','link','meta','img','video','audio','iframe'].includes(tag)) continue;
-
-      if (['h1','h2','h3','h4','h5','h6'].includes(tag)) {
-        blocks.push({ type: 'heading', text, level: parseInt(tag[1]), indent });
-      } else if (['p','blockquote','figcaption','label','dt','dd','address','pre','code'].includes(tag)) {
-        blocks.push({ type: 'text', text, level: 0, indent });
-      } else if (tag === 'li') {
-        blocks.push({ type: 'listItem', text, level: 0, indent });
-      } else if (tag === 'ul' || tag === 'ol') {
-        for (const li of Array.from(child.children)) {
-          if (li.tagName.toLowerCase() === 'li') {
-            const liText = li.textContent?.trim();
-            if (liText) blocks.push({ type: 'listItem', text: liText, level: 0, indent: indent + 4 });
-          }
-        }
-      } else if (tag === 'hr') {
-        blocks.push({ type: 'divider', text: '', level: 0, indent: 0 });
-      } else if (tag === 'a') {
-        const href = (child as HTMLAnchorElement).getAttribute('href') || '';
-        const linkText = href && href !== text ? `${text} (${href})` : text;
-        blocks.push({ type: 'link', text: linkText, level: 0, indent });
-      } else if (tag === 'table') {
-        // Extract table rows as text
-        child.querySelectorAll('tr').forEach(tr => {
-          const cells = Array.from(tr.querySelectorAll('td, th')).map(c => c.textContent?.trim()).filter(Boolean);
-          if (cells.length > 0) blocks.push({ type: 'text', text: cells.join('  |  '), level: 0, indent });
-        });
-      } else {
-        // Container elements — recurse
-        if (child.children.length > 0) {
-          blocks.push(...extractBlocks(child, indent));
-        } else if (text) {
-          blocks.push({ type: 'text', text, level: 0, indent });
-        }
-      }
-    }
-    return blocks;
-  }, []);
-
-  // ── PDF generation with visual design ──
-  const downloadPdf = useCallback(async () => {
+  // ── PDF: render actual slide HTML with full styling via print window ──
+  const downloadPdf = useCallback(() => {
     if (downloading || slides.length === 0) return;
     setDownloading(true);
 
-    try {
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const PW = 210, PH = 297, M = 18, CW = PW - M * 2;
-      const parser = new DOMParser();
-      const presTitle = presentation?.title || 'Presentacion';
+    const parser = new DOMParser();
+    const presTitle = presentation?.title || 'Presentacion';
 
-      // ── Helper: check if we need a page break ──
-      const needsBreak = (y: number, needed: number) => y + needed > PH - 20;
-      const newPage = (pdf: jsPDF) => { pdf.addPage(); return M + 12; };
+    // Sanitize: strip editing artifacts
+    const sanitize = (html: string): string =>
+      html
+        .replace(/\s*contenteditable="[^"]*"/gi, '')
+        .replace(/\s*data-visual-edit(="[^"]*")?/gi, '')
+        .replace(/<html[^>]*\s+style="[^"]*"/gi, (m) => m.replace(/\s+style="[^"]*"/, ''))
+        .replace(/<body[^>]*\s+style="[^"]*"/gi, (m) => m.replace(/\s+style="[^"]*"/, ''));
 
-      // ── Helper: draw page header (top bar) ──
-      const drawPageHeader = (pdf: jsPDF) => {
-        pdf.setFillColor(30, 27, 75);
-        pdf.rect(0, 0, PW, 10, 'F');
-        pdf.setFontSize(7);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setTextColor(180, 180, 220);
-        pdf.text(presTitle, M, 6.5);
-      };
+    // Collect unique styles + fonts from ALL slides, extract body content
+    const stylesSeen = new Set<string>();
+    const stylesList: string[] = [];
 
-      for (let i = 0; i < slides.length; i++) {
-        if (i > 0) pdf.addPage();
-        drawPageHeader(pdf);
+    const slidePages = slides.map((s, i) => {
+      const clean = sanitize(s.htmlContent || '');
+      const doc = parser.parseFromString(clean, 'text/html');
 
-        const cleanHtml = (slides[i].htmlContent || '')
-          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+      // Gather <style> and <link rel="stylesheet"> from each slide
+      doc.querySelectorAll('style, link[rel="stylesheet"]').forEach(el => {
+        const key = el.outerHTML;
+        if (!stylesSeen.has(key)) {
+          stylesSeen.add(key);
+          stylesList.push(key);
+        }
+      });
 
-        const doc = parser.parseFromString(cleanHtml, 'text/html');
-        const title = doc.querySelector('title')?.textContent?.trim() || `Slide ${i + 1}`;
+      const bodyHtml = doc.body ? doc.body.innerHTML : clean;
 
-        let y = 16;
+      return `<div class="slide-page"><div class="slide-inner">${bodyHtml}</div><div class="slide-badge">${i + 1} / ${slides.length}</div></div>`;
+    });
 
-        // ─── Slide title banner (full-width colored block) ───
-        const titleLines = pdf.splitTextToSize(title, CW - 20);
-        const bannerH = Math.max(titleLines.length * 7 + 10, 18);
-        pdf.setFillColor(67, 56, 202);
-        pdf.roundedRect(M, y, CW, bannerH, 2, 2, 'F');
-        // Slide number circle
-        pdf.setFillColor(255, 255, 255, 30);
-        pdf.setFillColor(99, 102, 241);
-        pdf.circle(M + 9, y + bannerH / 2, 5, 'F');
-        pdf.setTextColor(255, 255, 255);
-        pdf.setFontSize(10);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text(`${i + 1}`, M + 9, y + bannerH / 2 + 1, { align: 'center' });
-        // Title text
-        pdf.setFontSize(14);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(255, 255, 255);
-        const titleY = y + (bannerH - titleLines.length * 6) / 2 + 5;
-        pdf.text(titleLines, M + 18, titleY);
-        // Subtitle: slide count
-        pdf.setFontSize(7);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setTextColor(200, 200, 255);
-        pdf.text(`Slide ${i + 1} de ${slides.length}`, M + CW - 3, y + bannerH - 3, { align: 'right' });
-        y += bannerH + 6;
+    // Open print window and build the document
+    const pw = window.open('', '_blank');
+    if (!pw) { setDownloading(false); return; }
 
-        // ─── Content blocks ───
-        const blocks = extractBlocks(doc.body);
-        let prevType = '';
+    const pd = pw.document;
+    pd.open();
+    pd.write('<!DOCTYPE html><html><head><meta charset="utf-8"></head><body></body></html>');
+    pd.close();
 
-        for (let b = 0; b < blocks.length; b++) {
-          const block = blocks[b];
-          const bIndent = block.indent || 0;
+    pd.title = presTitle + ' — PDF';
 
-          switch (block.type) {
-            case 'heading': {
-              // Extra space before headings (visual breathing room)
-              if (prevType && prevType !== 'heading') y += 4;
+    // ── Add Tailwind CDN + Google Fonts ──
+    const tailwind = pd.createElement('script');
+    tailwind.src = 'https://cdn.tailwindcss.com';
+    pd.head.appendChild(tailwind);
 
-              const isH1 = block.level <= 2;
-              const sz = isH1 ? 12 : 10.5;
-              const textLines = pdf.splitTextToSize(block.text, CW - bIndent - 6);
-              const blockH = textLines.length * (sz * 0.45) + 4;
+    const gfPre1 = pd.createElement('link');
+    gfPre1.rel = 'preconnect';
+    gfPre1.href = 'https://fonts.googleapis.com';
+    pd.head.appendChild(gfPre1);
 
-              if (needsBreak(y, blockH + 4)) { y = newPage(pdf); drawPageHeader(pdf); }
+    const gfPre2 = pd.createElement('link');
+    gfPre2.rel = 'preconnect';
+    gfPre2.href = 'https://fonts.gstatic.com';
+    gfPre2.crossOrigin = '';
+    pd.head.appendChild(gfPre2);
 
-              if (isH1) {
-                // Accent bar + light background for main headings
-                pdf.setFillColor(243, 244, 246);
-                pdf.roundedRect(M + bIndent, y - 2, CW - bIndent, blockH + 2, 1.5, 1.5, 'F');
-                pdf.setFillColor(79, 70, 229);
-                pdf.rect(M + bIndent, y - 2, 1.2, blockH + 2, 'F');
-              } else {
-                // Small accent bar for sub-headings
-                pdf.setFillColor(165, 160, 240);
-                pdf.rect(M + bIndent, y - 1, 0.8, blockH, 'F');
-              }
+    const gfLink = pd.createElement('link');
+    gfLink.rel = 'stylesheet';
+    gfLink.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap';
+    pd.head.appendChild(gfLink);
 
-              pdf.setFontSize(sz);
-              pdf.setFont('helvetica', 'bold');
-              pdf.setTextColor(30, 41, 59);
-              pdf.text(textLines, M + bIndent + (isH1 ? 5 : 4), y + 2);
-              y += blockH + 3;
-              break;
+    // ── Add collected slide styles ──
+    const stylesDiv = pd.createElement('div');
+    stylesDiv.innerHTML = stylesList.join('\n');
+    while (stylesDiv.firstChild) {
+      pd.head.appendChild(stylesDiv.firstChild);
+    }
+
+    // ── Print layout CSS ──
+    const layoutStyle = pd.createElement('style');
+    layoutStyle.textContent = `
+      @page { size: landscape; margin: 0; }
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
+      .slide-page {
+        width: 297mm; height: 210mm;
+        position: relative;
+        overflow: hidden;
+        page-break-after: always;
+        break-after: page;
+        background: #ffffff;
+      }
+      .slide-page:last-child {
+        page-break-after: auto;
+        break-after: auto;
+      }
+      .slide-inner {
+        width: 297mm; height: 210mm;
+        overflow: hidden;
+        transform-origin: top left;
+      }
+      .slide-badge {
+        position: absolute;
+        bottom: 5mm; right: 6mm;
+        font-size: 8px;
+        color: rgba(0,0,0,0.25);
+        font-family: 'Inter', sans-serif;
+        z-index: 9999;
+      }
+      img { max-width: 100%; height: auto; }
+      /* Screen preview styles */
+      @media screen {
+        html { background: #1e1b4b; }
+        body { background: #1e1b4b; padding: 24px; }
+        .slide-page {
+          margin: 0 auto 24px;
+          box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+          border-radius: 8px;
+        }
+        /* Loading overlay */
+        .pdf-loading {
+          position: fixed; inset: 0;
+          background: #1e1b4b;
+          display: flex; align-items: center; justify-content: center;
+          z-index: 99999;
+          flex-direction: column; gap: 16px;
+          color: white; font-family: 'Inter', sans-serif;
+        }
+        .pdf-loading .spinner {
+          width: 36px; height: 36px;
+          border: 3px solid rgba(255,255,255,0.15);
+          border-top-color: #818cf8;
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .pdf-loading p { font-size: 14px; color: #c7d2fe; }
+        .pdf-loading small { font-size: 11px; color: #818cf8; }
+      }
+    `;
+    pd.head.appendChild(layoutStyle);
+
+    // ── Loading overlay ──
+    const loadingDiv = pd.createElement('div');
+    loadingDiv.className = 'pdf-loading';
+    loadingDiv.innerHTML = '<div class="spinner"></div><p>Preparando PDF...</p><small>Se abrira el dialogo de impresion. Selecciona "Guardar como PDF".</small>';
+    pd.body.appendChild(loadingDiv);
+
+    // ── Insert slide pages ──
+    const container = pd.createElement('div');
+    container.innerHTML = slidePages.join('');
+    while (container.firstChild) {
+      pd.body.appendChild(container.firstChild);
+    }
+
+    // ── Wait for Tailwind CDN + fonts, then scale + print ──
+    const printScript = pd.createElement('script');
+    printScript.textContent = `
+      (function() {
+        function doScaleAndPrint() {
+          var pages = document.querySelectorAll('.slide-page');
+          // Measure mm-to-px
+          var ruler = document.createElement('div');
+          ruler.style.cssText = 'position:absolute;visibility:hidden;width:297mm;height:210mm;';
+          document.body.appendChild(ruler);
+          var pageW = ruler.offsetWidth;
+          var pageH = ruler.offsetHeight;
+          document.body.removeChild(ruler);
+
+          pages.forEach(function(page) {
+            var inner = page.querySelector('.slide-inner');
+            if (!inner) return;
+            // Temporarily let content expand to measure
+            inner.style.width = pageW + 'px';
+            inner.style.height = 'auto';
+            inner.style.overflow = 'visible';
+            var cw = Math.max(inner.scrollWidth, pageW);
+            var ch = Math.max(inner.scrollHeight, pageH);
+            var sx = pageW / cw;
+            var sy = pageH / ch;
+            var scale = Math.min(sx, sy, 1);
+            if (scale < 0.99) {
+              inner.style.transform = 'scale(' + scale + ')';
+              inner.style.width = (pageW / scale) + 'px';
+              inner.style.height = (pageH / scale) + 'px';
+            } else {
+              inner.style.width = pageW + 'px';
+              inner.style.height = pageH + 'px';
             }
+            inner.style.overflow = 'hidden';
+          });
 
-            case 'text': {
-              pdf.setFontSize(9.5);
-              pdf.setFont('helvetica', 'normal');
-              pdf.setTextColor(55, 65, 81);
-              const textLines = pdf.splitTextToSize(block.text, CW - bIndent - 2);
-              const lh = 4.2;
-              const blockH = textLines.length * lh;
+          // Remove loading overlay
+          var lo = document.querySelector('.pdf-loading');
+          if (lo) lo.remove();
 
-              if (needsBreak(y, blockH)) { y = newPage(pdf); drawPageHeader(pdf); }
+          // Print
+          setTimeout(function() { window.print(); }, 400);
+        }
 
-              pdf.text(textLines, M + bIndent + 2, y);
-              y += blockH + 2;
-              break;
-            }
-
-            case 'listItem': {
-              pdf.setFontSize(9.5);
-              pdf.setFont('helvetica', 'normal');
-              pdf.setTextColor(55, 65, 81);
-              const bx = M + bIndent + 2;
-              const textLines = pdf.splitTextToSize(block.text, CW - bIndent - 9);
-              const lh = 4.2;
-              const blockH = textLines.length * lh;
-
-              if (needsBreak(y, blockH)) { y = newPage(pdf); drawPageHeader(pdf); }
-
-              // Colored bullet
-              pdf.setFillColor(99, 102, 241);
-              pdf.circle(bx + 1.2, y - 1, 1, 'F');
-              pdf.text(textLines, bx + 5, y);
-              y += blockH + 1.5;
-              break;
-            }
-
-            case 'link': {
-              pdf.setFontSize(9);
-              pdf.setFont('helvetica', 'normal');
-              pdf.setTextColor(79, 70, 229);
-              const textLines = pdf.splitTextToSize(block.text, CW - bIndent - 2);
-              const lh = 4;
-              const blockH = textLines.length * lh;
-
-              if (needsBreak(y, blockH)) { y = newPage(pdf); drawPageHeader(pdf); }
-
-              // Link icon (small underline)
-              pdf.text(textLines, M + bIndent + 2, y);
-              const lastLineW = pdf.getTextWidth(textLines[textLines.length - 1]);
-              pdf.setDrawColor(99, 102, 241);
-              pdf.setLineWidth(0.2);
-              const underlineY = y + (textLines.length - 1) * lh + 1;
-              pdf.line(M + bIndent + 2, underlineY, M + bIndent + 2 + Math.min(lastLineW, CW), underlineY);
-              y += blockH + 2;
-              pdf.setTextColor(55, 65, 81);
-              break;
-            }
-
-            case 'divider': {
-              y += 3;
-              if (needsBreak(y, 6)) { y = newPage(pdf); drawPageHeader(pdf); }
-              pdf.setDrawColor(210, 215, 225);
-              pdf.setLineWidth(0.3);
-              const dashLen = 2;
-              for (let dx = M; dx < M + CW; dx += dashLen * 2) {
-                pdf.line(dx, y, Math.min(dx + dashLen, M + CW), y);
-              }
-              y += 5;
-              break;
+        // Wait for Tailwind CDN to finish processing
+        var attempts = 0;
+        var check = setInterval(function() {
+          attempts++;
+          var ready = !!document.querySelector('style') && attempts > 10;
+          if (ready || attempts > 40) {
+            clearInterval(check);
+            // Extra wait for fonts + images
+            if (document.fonts && document.fonts.ready) {
+              document.fonts.ready.then(function() {
+                setTimeout(doScaleAndPrint, 800);
+              });
+            } else {
+              setTimeout(doScaleAndPrint, 2000);
             }
           }
-          prevType = block.type;
-        }
-      }
+        }, 200);
+      })();
+    `;
+    pd.body.appendChild(printScript);
 
-      // ── Page footer on every page ──
-      const totalPages = pdf.getNumberOfPages();
-      for (let p = 1; p <= totalPages; p++) {
-        pdf.setPage(p);
-        // Thin line above footer
-        pdf.setDrawColor(220, 225, 235);
-        pdf.setLineWidth(0.2);
-        pdf.line(M, PH - 12, M + CW, PH - 12);
-        // Footer text
-        pdf.setFontSize(7);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setTextColor(156, 163, 175);
-        pdf.text(presTitle, M, PH - 8);
-        pdf.text(`Pag. ${p} / ${totalPages}`, M + CW, PH - 8, { align: 'right' });
-      }
-
-      pdf.save(`${presTitle}.pdf`);
-    } catch (err) {
-      console.error('Error generating PDF:', err);
-    } finally {
-      setDownloading(false);
-    }
-  }, [downloading, slides, presentation, extractBlocks]);
+    // Reset state after delay
+    setTimeout(() => setDownloading(false), 6000);
+  }, [downloading, slides, presentation]);
 
   // Loading state
   if (loading) {
