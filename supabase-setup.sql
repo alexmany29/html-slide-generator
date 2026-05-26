@@ -137,6 +137,9 @@ BEGIN
   INSERT INTO public.profiles (id, email)
   VALUES (new.id, new.email);
   RETURN new;
+EXCEPTION WHEN unique_violation THEN
+  -- Profile already exists (id or email conflict); ignore and continue
+  RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

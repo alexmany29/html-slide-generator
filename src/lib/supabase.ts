@@ -8,7 +8,15 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+    storageKey: 'sb-auth-token',
+    flowType: 'pkce',
+  },
+});
 
 // Re-export DbSlide as Slide for backward compat in service layer
 export type Slide = DbSlide;

@@ -2,8 +2,17 @@ import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { supabase } from '../lib/supabase';
 import { Layers, Code, Monitor, Share2 } from 'lucide-react';
+import { useMemo } from 'react';
 
 export default function AuthComponent() {
+  const redirectTo = useMemo(() => {
+    try {
+      return window.location.origin + window.location.pathname;
+    } catch {
+      return undefined;
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-gray-950 flex">
       {/* Left panel - branding */}
@@ -125,7 +134,7 @@ export default function AuthComponent() {
                 },
               }}
               providers={[]}
-              redirectTo={window.location.origin}
+              redirectTo={redirectTo}
             />
           </div>
 
