@@ -85,6 +85,14 @@ CREATE POLICY "Users can view accessible presentations" ON public.presentations 
 );
 CREATE POLICY "Users can insert own presentations" ON public.presentations FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can update own presentations" ON public.presentations FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Shared users with edit can update presentations" ON public.presentations FOR UPDATE USING (
+    EXISTS (
+        SELECT 1 FROM public.presentation_shares
+        WHERE presentation_id = presentations.id
+        AND shared_with_user_id = auth.uid()
+        AND permission_level = 'edit'
+    )
+);
 CREATE POLICY "Users can delete own presentations" ON public.presentations FOR DELETE USING (auth.uid() = user_id);
 
 -- 9. Políticas RLS para `presentation_shares`
@@ -106,6 +114,14 @@ CREATE POLICY "Users can view slides of accessible presentations" ON public.slid
 );
 CREATE POLICY "Owners can manage slides in their presentations" ON public.slides FOR ALL USING (
     EXISTS (SELECT 1 FROM public.presentations WHERE id = slides.presentation_id AND user_id = auth.uid())
+);
+CREATE POLICY "Shared users with edit can manage slides" ON public.slides FOR ALL USING (
+    EXISTS (
+        SELECT 1 FROM public.presentation_shares
+        WHERE presentation_id = slides.presentation_id
+        AND shared_with_user_id = auth.uid()
+        AND permission_level = 'edit'
+    )
 );
 
 -- 11. Índices para mejorar el rendimiento

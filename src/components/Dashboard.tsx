@@ -80,10 +80,7 @@ export default function Dashboard() {
 
   const handleDuplicatePresentation = async (presentation: Presentation) => {
     try {
-      await presentationService.createPresentation(
-        `${presentation.title} (copia)`,
-        presentation.description
-      );
+      await presentationService.duplicatePresentation(presentation.id);
       await loadPresentations();
       toast.success('Presentacion duplicada');
     } catch (error) {

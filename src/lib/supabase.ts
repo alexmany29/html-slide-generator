@@ -126,6 +126,68 @@ export const presentationService = {
     return presentation as Presentation;
   },
 
+  // Duplicate presentation with all slides
+  async duplicatePresentation(presentationId: string) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Get original presentation
+    const { data: original, error: originalError } = await supabase
+      .from('presentations')
+      .select('*')
+      .eq('id', presentationId)
+      .single();
+    if (originalError || !original) throw originalError || new Error('Presentation not found');
+
+    // Get original slides
+    const { data: originalSlides, error: slidesError } = await supabase
+      .from('slides')
+      .select('*')
+      .eq('presentation_id', presentationId)
+      .order('slide_order', { ascending: true });
+    if (slidesError) throw slidesError;
+
+    // Create new presentation
+    const { data: newPresentation, error: presentationError } = await supabase
+      .from('presentations')
+      .insert({
+        title: `${original.title} (copia)`,
+        description: original.description,
+        user_id: user.id,
+        is_public: false,
+      })
+      .select()
+      .single();
+    if (presentationError) throw presentationError;
+
+    // Copy slides
+    if (originalSlides && originalSlides.length > 0) {
+      const slideCopies = originalSlides.map((slide, index) => ({
+        presentation_id: newPresentation.id,
+        title: slide.title,
+        html_content: slide.html_content,
+        slide_order: index,
+      }));
+
+      const { error: copyError } = await supabase
+        .from('slides')
+        .insert(slideCopies);
+      if (copyError) throw copyError;
+    } else {
+      // Create initial slide if original had none
+      const { error: slideError } = await supabase
+        .from('slides')
+        .insert({
+          presentation_id: newPresentation.id,
+          title: 'Slide 1',
+          html_content: '<div class="slide-content"><h1>Nueva Slide</h1><p>Haz clic en "Editar HTML" para personalizar esta slide.</p></div>'
+        });
+      if (slideError) throw slideError;
+    }
+
+    return newPresentation as Presentation;
+  },
+
   // Update presentation
   async updatePresentation(id: string, updates: Partial<Presentation>) {
     const { data, error } = await supabase
